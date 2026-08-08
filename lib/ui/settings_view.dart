@@ -11,14 +11,17 @@ import '../core/screen_mode.dart';
 import '../gamepad/gamepad_manager.dart';
 import 'theme.dart';
 import 'widgets/cover_backdrop.dart';
+import 'widgets/cover_carousel.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
 
-/// Configuracoes no estilo EmulationStation, categorizadas: trilho lateral de
-/// categorias, lista de opcoes da categoria ativa e painel de descricao.
-/// Navegacao por gamepad/teclado:
-///   - cima/baixo: opcao   - esquerda/direita: valor
-///   - LB/RB (PageUp/Down): categoria   - A: ativar   - B: voltar
+/// Configuracoes estilo console, categorizadas em um carrossel horizontal
+/// (mesmo comportamento da tela de sistemas: distancia fixa entre os tiles e
+/// mais itens visiveis em telas maiores). Navegacao por gamepad/teclado:
+///   - esquerda/direita (ou LB/RB): categoria
+///   - cima/baixo: opcao da categoria selecionada
+///   - A: ativar (liga/desliga, avanca valor ou acao)
+///   - B: voltar
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
 
@@ -277,6 +280,12 @@ class _SettingsViewState extends State<SettingsView> {
     return i < 0 ? 0 : i;
   }
 
+  Color _categoryAccent() {
+    if (_categories.isEmpty) return AppTheme.accent;
+    const keys = ['nes', 'snes', 'gba', 'psx'];
+    return AppTheme.systemColor(keys[_category % keys.length]);
+  }
+
   void _onGamepad(GamepadAction action) {
     if (!mounted) return;
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
@@ -288,9 +297,9 @@ class _SettingsViewState extends State<SettingsView> {
       case GamepadAction.down:
         _move(1);
       case GamepadAction.left:
-        _adjust(-1);
+        _moveCategory(-1);
       case GamepadAction.right:
-        _adjust(1);
+        _moveCategory(1);
       case GamepadAction.confirm:
         _activate();
       case GamepadAction.back:
@@ -299,9 +308,9 @@ class _SettingsViewState extends State<SettingsView> {
       case GamepadAction.home:
         Navigator.of(context).pop();
       case GamepadAction.pageUp:
-        _switchCategory(-1);
+        _moveCategory(-1);
       case GamepadAction.pageDown:
-        _switchCategory(1);
+        _moveCategory(1);
       case GamepadAction.select:
         break;
     }
@@ -314,13 +323,13 @@ class _SettingsViewState extends State<SettingsView> {
     var next = _selected + delta;
     if (next < 0 || next >= options.length) {
       final dir = next < 0 ? -1 : 1;
-      _switchCategory(dir);
+      _moveCategory(dir);
       return;
     }
     _select(next);
   }
 
-  void _switchCategory(int delta) {
+  void _moveCategory(int delta) {
     if (_categories.isEmpty) return;
     final next = (_category + delta).clamp(0, _categories.length - 1);
     if (next == _category) return;
@@ -350,16 +359,6 @@ class _SettingsViewState extends State<SettingsView> {
         );
       }
     });
-  }
-
-  void _adjust(int dir) {
-    final opt = _selectedOption();
-    if (opt == null) return;
-    final count = opt.count;
-    if (count == 0) return;
-    final next = (opt.index + dir) % count;
-    opt.onCycle?.call(next);
-    setState(() {});
   }
 
   Future<void> _activate() async {
@@ -395,10 +394,10 @@ class _SettingsViewState extends State<SettingsView> {
       _move(1);
     }
     ..onLeft = () {
-      _adjust(-1);
+      _moveCategory(-1);
     }
     ..onRight = () {
-      _adjust(1);
+      _moveCategory(1);
     }
     ..onConfirm = _activate
     ..onBack = () {
@@ -411,10 +410,10 @@ class _SettingsViewState extends State<SettingsView> {
       Navigator.of(context).popUntil((r) => r.isFirst);
     }
     ..onPageUp = () {
-      _switchCategory(-1);
+      _moveCategory(-1);
     }
     ..onPageDown = () {
-      _switchCategory(1);
+      _moveCategory(1);
     };
 
   @override
@@ -427,7 +426,6 @@ class _SettingsViewState extends State<SettingsView> {
 
     final isWide =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
-    final hasRail = isWide && _categories.length > 1;
     final accent = _categoryAccent();
 
     return Scaffold(
@@ -436,31 +434,13 @@ class _SettingsViewState extends State<SettingsView> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            CoverBackdrop(
-              color: accent,
-              darken: isWide ? 0.35 : 0.6,
-            ),
+            CoverBackdrop(color: accent, darken: isWide ? 0.35 : 0.6),
             SafeArea(
               child: Column(
                 children: [
                   _topBar(onBack: () => Navigator.of(context).pop()),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (hasRail)
-                          _categoryRail(accent),
-                        SizedBox(
-                          width: isWide
-                              ? MediaQuery.of(context).size.width * (hasRail ? 0.42 : 0.52)
-                              : double.infinity,
-                          child: _optionsList(accent),
-                        ),
-                        if (isWide)
-                          Expanded(child: _detailPanel(accent)),
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _optionsArea(accent, isWide)),
+                  _categoryCarousel(accent),
                   _hints(),
                 ],
               ),
@@ -469,12 +449,6 @@ class _SettingsViewState extends State<SettingsView> {
         ),
       ),
     );
-  }
-
-  Color _categoryAccent() {
-    if (_categories.isEmpty) return AppTheme.accent;
-    const keys = ['nes', 'snes', 'gba', 'psx'];
-    return AppTheme.systemColor(keys[_category % keys.length]);
   }
 
   Widget _topBar({required VoidCallback onBack}) {
@@ -507,79 +481,7 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _categoryRail(Color accent) {
-    return Container(
-      width: 176,
-      margin: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: ListView.builder(
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          final cat = _categories[index];
-          final active = index == _category;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            child: InkWell(
-              onTap: () {
-                if (index != _category) _switchCategory(index - _category);
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                decoration: BoxDecoration(
-                  gradient: active
-                      ? LinearGradient(
-                          colors: [
-                            accent.withValues(alpha: 0.85),
-                            AppTheme.accentAlt.withValues(alpha: 0.75),
-                          ],
-                        )
-                      : null,
-                  color: active ? null : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      cat.icon,
-                      size: 20,
-                      color: active ? Colors.white : Colors.white54,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        cat.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: active ? Colors.white : Colors.white70,
-                          fontSize: 14,
-                          fontWeight:
-                              active ? FontWeight.w700 : FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    if (active)
-                      const Icon(Icons.chevron_left,
-                          size: 16, color: Colors.white70),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _optionsList(Color accent) {
-    final cat = _categories[_category];
+  Widget _optionsArea(Color accent, bool isWide) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -587,97 +489,114 @@ class _SettingsViewState extends State<SettingsView> {
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
           child: Row(
             children: [
-              Icon(cat.icon, size: 18, color: AppTheme.accentAlt),
+              Icon(_categories[_category].icon,
+                  size: 18, color: AppTheme.accentAlt),
               const SizedBox(width: 8),
-              Text(
-                cat.label.toUpperCase(),
-                style: const TextStyle(
-                  color: AppTheme.accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
+              Expanded(
+                child: Text(
+                  _categories[_category].label.toUpperCase(),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             ],
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            itemCount: cat.options.length,
-            itemBuilder: (context, index) {
-              final opt = cat.options[index];
-              final selected = index == _selected;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: KeyedSubtree(
-                  key: _rowKeys[index],
-                  child: InkWell(
-                    onTap: () => _select(index),
-                    borderRadius: BorderRadius.circular(10),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 120),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 11,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? accent.withValues(alpha: 0.28)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected
-                              ? accent.withValues(alpha: 0.75)
-                              : Colors.white10,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              opt.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          if (opt.valueText.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                opt.valueText,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            Icons.chevron_right,
-                            size: 18,
-                            color: selected
-                                ? AppTheme.accentAlt
-                                : Colors.white24,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _optionsList(accent)),
+              if (isWide)
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.34,
+                  child: _detailPanel(accent),
                 ),
-              );
-            },
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _optionsList(Color accent) {
+    final cat = _categories[_category];
+    return ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      itemCount: cat.options.length,
+      itemBuilder: (context, index) {
+        final opt = cat.options[index];
+        final selected = index == _selected;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: KeyedSubtree(
+            key: _rowKeys[index],
+            child: InkWell(
+              onTap: () => _select(index),
+              borderRadius: BorderRadius.circular(10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? accent.withValues(alpha: 0.28)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: selected
+                        ? accent.withValues(alpha: 0.75)
+                        : Colors.white10,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        opt.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (opt.valueText.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Text(
+                          opt.valueText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: selected ? AppTheme.accentAlt : Colors.white24,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -779,13 +698,49 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
+  Widget _categoryCarousel(Color accent) {
+    return SizedBox(
+      height: 132,
+      child: CoverCarousel(
+        itemCount: _categories.length,
+        tileWidth: 190,
+        tileHeight: 132,
+        selected: _category,
+        onSelect: (i) {
+          if (i != _category) _moveCategory(i - _category);
+        },
+        itemBuilder: (context, index, selected) {
+          final cat = _categories[index];
+          final color = _categoryColor(index);
+          return _CategoryCover(
+            label: cat.label,
+            icon: cat.icon,
+            color: color,
+            selected: selected,
+            onTap: () {
+              if (selected) {
+                setState(() {});
+              } else {
+                _moveCategory(index - _category);
+              }
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Color _categoryColor(int index) {
+    const keys = ['nes', 'snes', 'gba', 'psx'];
+    return AppTheme.systemColor(keys[index % keys.length]);
+  }
+
   Widget _hints() {
     if (!_svc.settings.getShowHints()) return const SizedBox.shrink();
     return const HintBar(
       hints: [
+        Hint('◄ ►  categoria'),
         Hint('▲▼  opção'),
-        Hint('◄ ►  valor'),
-        Hint('LB/RB  categoria'),
         Hint('A  ativar'),
         Hint('B  voltar'),
       ],
@@ -793,7 +748,88 @@ class _SettingsViewState extends State<SettingsView> {
   }
 }
 
-/// Categoria de configuracoes (trilho lateral).
+/// Tile de categoria para o carrossel de configuracoes.
+class _CategoryCover extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryCover({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(16);
+    return AnimatedScale(
+      scale: selected ? 1.0 : 0.84,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      child: AnimatedOpacity(
+        opacity: selected ? 1.0 : 0.45,
+        duration: const Duration(milliseconds: 220),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color, AppTheme.darken(color, 0.45)],
+              ),
+              border: Border.all(
+                color: selected ? Colors.white : Colors.white12,
+                width: selected ? 2.5 : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.55),
+                        blurRadius: 28,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: ClipRRect(
+              borderRadius: radius,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, color: Colors.white.withValues(alpha: 0.85), size: 24),
+                    const Spacer(),
+                    Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Categoria de configuracoes (carrossel inferior).
 class _Category {
   final String label;
   final String description;

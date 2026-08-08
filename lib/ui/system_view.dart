@@ -11,6 +11,7 @@ import 'settings_view.dart';
 import 'theme.dart';
 import 'widgets/console_route.dart';
 import 'widgets/cover_backdrop.dart';
+import 'widgets/cover_carousel.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
 import 'widgets/system_cover.dart';
@@ -27,8 +28,6 @@ class SystemView extends StatefulWidget {
 class _SystemViewState extends State<SystemView> {
   AppServices get _svc => AppScope.of(context);
 
-  PageController? _page;
-  double _fraction = -1;
   List<SystemEntry> _systems = [];
   int _selected = 0;
   bool _loading = true;
@@ -45,22 +44,7 @@ class _SystemViewState extends State<SystemView> {
   @override
   void dispose() {
     _gamepadSub?.cancel();
-    _page?.dispose();
     super.dispose();
-  }
-
-  /// Recria o PageController quando a fracao de pagina muda (ex.: giro de tela).
-  PageController _ensurePage(double fraction) {
-    final c = _page;
-    if (c != null && (_fraction - fraction).abs() < 0.001) return c;
-    _page?.dispose();
-    final nc = PageController(
-      viewportFraction: fraction,
-      initialPage: _selected.clamp(0, _systems.isEmpty ? 0 : _systems.length - 1),
-    );
-    _page = nc;
-    _fraction = fraction;
-    return nc;
   }
 
   Future<void> _load() async {
@@ -86,7 +70,6 @@ class _SystemViewState extends State<SystemView> {
         _systems = systems;
         _selected = 0;
         _loading = false;
-        if (_page?.hasClients ?? false) _page!.jumpToPage(0);
       });
     } catch (_) {
       if (!mounted) return;
@@ -137,13 +120,6 @@ class _SystemViewState extends State<SystemView> {
   void _select(int index) {
     if (index == _selected) return;
     setState(() => _selected = index);
-    if (_page?.hasClients ?? false) {
-      _page!.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      );
-    }
   }
 
   void _openSelected() {
@@ -171,11 +147,8 @@ class _SystemViewState extends State<SystemView> {
   Widget build(BuildContext context) {
     final isLandscape =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
     final carouselH = isLandscape ? 300.0 : 220.0;
     final tileW = (carouselH * 0.72).clamp(0.0, 250.0);
-    final fraction = (tileW * 1.65 / screenWidth).clamp(0.4, 0.85);
-    final controller = _ensurePage(fraction);
 
     return Scaffold(
       body: NavFocus(
@@ -223,14 +196,30 @@ class _SystemViewState extends State<SystemView> {
                     _TopBar(onRefresh: _load, onSettings: _openSettings),
                     Expanded(child: _InfoPanel(system: _systems[_selected])),
                     SizedBox(
-                      height: isLandscape ? 300 : 220,
-                      child: _Carousel(
-                        controller: controller,
-                        fraction: fraction,
-                        systems: _systems,
+                      height: carouselH,
+                      child: CoverCarousel(
+                        itemCount: _systems.length,
+                        tileWidth: tileW,
+                        tileHeight: carouselH,
                         selected: _selected,
                         onSelect: _select,
-                        onOpen: _openSelected,
+                        itemBuilder: (context, index, selected) {
+                          final system = _systems[index];
+                          return SystemCover(
+                            name: system.name,
+                            fullName: system.fullName,
+                            color: AppTheme.systemColor(system.name),
+                            gameCount: system.gameCount,
+                            selected: selected,
+                            onTap: () {
+                              if (selected) {
+                                _openSelected();
+                              } else {
+                                _select(index);
+                              }
+                            },
+                          );
+                        },
                       ),
                     ),
                     if (_svc.settings.getShowHints())
@@ -392,66 +381,6 @@ class _Dot extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 10),
       child: Text('•', style: TextStyle(color: AppTheme.accent, fontSize: 14)),
-    );
-  }
-}
-
-class _Carousel extends StatelessWidget {
-  final PageController controller;
-  final double fraction;
-  final List<SystemEntry> systems;
-  final int selected;
-  final ValueChanged<int> onSelect;
-  final VoidCallback onOpen;
-
-  const _Carousel({
-    required this.controller,
-    required this.fraction,
-    required this.systems,
-    required this.selected,
-    required this.onSelect,
-    required this.onOpen,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final carouselH = constraints.maxHeight;
-        final tileW = (carouselH * 0.72).clamp(0.0, 250.0);
-
-        return PageView.builder(
-          controller: controller,
-          itemCount: systems.length,
-          padEnds: false,
-          onPageChanged: (i) {
-            if (i != selected) onSelect(i);
-          },
-          itemBuilder: (context, index) {
-            final system = systems[index];
-            return Center(
-              child: SizedBox(
-                width: tileW,
-                height: carouselH,
-                child: SystemCover(
-                  name: system.name,
-                  fullName: system.fullName,
-                  color: AppTheme.systemColor(system.name),
-                  gameCount: system.gameCount,
-                  selected: index == selected,
-                  onTap: () {
-                    if (index == selected) {
-                      onOpen();
-                    } else {
-                      onSelect(index);
-                    }
-                  },
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
