@@ -32,40 +32,76 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
                     val path = call.arguments as? String ?: ""
                     result.success(launchRetroArch(path))
                 }
+                "detectRetroArch" -> {
+                    result.success(findRetroArchPackage())
+                }
                 else -> result.notImplemented()
             }
         }
     }
 
+    private val retroarchPackages = listOf("com.retroarch", "com.retroarch.bq.plus")
+
+    /** Encontra o pacote do RetroArch instalado (qualquer versao do Android). */
+    private fun findRetroArchPackage(): String? {
+        val pm = applicationContext.packageManager
+        // 1) Pacotes conhecidos (visiveis em Android 11+ via <queries>).
+        for (pkg in retroarchPackages) {
+            try {
+                pm.getPackageInfo(pkg, 0)
+                return pkg
+            } catch (e: Exception) {
+                // nao instalado
+            }
+        }
+        // 2) Fallback: atividades que abrem arquivos cujo pacote tem "retroarch".
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW).apply { type = "*/*" }
+            pm.queryIntentActivities(intent, 0)
+                .mapNotNull { it.activityInfo?.packageName }
+                .firstOrNull { it.contains("retroarch", ignoreCase = true) }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun launchRetroArch(romPath: String): Boolean {
         val context = applicationContext
-        val retroArchInstalled = try {
-            context.packageManager.getPackageInfo("com.retroarch", 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
-        if (!retroArchInstalled) return false
+        val pkg = findRetroArchPackage() ?: return false
 
         val file = File(romPath)
         if (!file.exists()) return false
 
-        return try {
-            val uri = FileProvider.getUriForFile(
+        val uri = try {
+            FileProvider.getUriForFile(
                 context,
                 "$packageName.fileprovider",
                 file
             )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                data = uri
-                type = "*/*"
-                setPackage("com.retroarch")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+        } catch (e: Exception) {
+            return false
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            data = uri
+            type = "*/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        // 1) Abre no RetroArch detectado.
+        return try {
+            intent.setPackage(pkg)
             startActivity(intent)
             true
         } catch (e: ActivityNotFoundException) {
-            false
+            // 2) Fallback: deixa o sistema resolver (seletor de apps).
+            try {
+                intent.setPackage(null)
+                startActivity(intent)
+                true
+            } catch (e2: Exception) {
+                false
+            }
         } catch (e: Exception) {
             false
         }

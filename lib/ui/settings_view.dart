@@ -38,6 +38,7 @@ class _SettingsViewState extends State<SettingsView> {
   int _category = 0;
   int _selected = 0;
   String _defaultRoms = '';
+  String? _retroArch;
   bool _androidAccess = true;
   bool _loading = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
@@ -62,10 +63,12 @@ class _SettingsViewState extends State<SettingsView> {
     final defaultRoms = (await AppDirs.romsRoot()).path;
     var androidAccess = true;
     if (AndroidStorage.isNeeded) androidAccess = await AndroidStorage.hasAccess();
+    final retroArch = await _svc.launcher.findRetroArch();
     if (!mounted) return;
     setState(() {
       _defaultRoms = defaultRoms;
       _androidAccess = androidAccess;
+      _retroArch = retroArch;
       _categories = _buildCategories();
       _rowKeys = List.generate(_currentOptions().length, (_) => GlobalKey());
       _loading = false;
@@ -162,17 +165,35 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         ],
       ),
-      if (!AppDirs.isAndroid && !AppDirs.isIOS)
-        _Category(
-          label: 'Emulador',
-          description: 'Como os jogos são iniciados no desktop.',
-          icon: Icons.memory,
-          options: [
+      _Category(
+        label: 'Emulador',
+        description: 'Detecção automática do RetroArch instalado no dispositivo.',
+        icon: Icons.memory,
+        options: [
+          if (AppDirs.isAndroid || AppDirs.isIOS)
+            _Option(
+              label: 'RetroArch detectado',
+              description: 'O app procura o RetroArch instalado em qualquer '
+                  'versão do Android/iOS automaticamente. Use A para '
+                  'verificar novamente.',
+              display: () => _retroArch ?? 'não instalado',
+              onConfirm: () async {
+                final detected = await _svc.launcher.findRetroArch();
+                if (!mounted) return;
+                setState(() => _retroArch = detected);
+              },
+            )
+          else
             _Option(
               label: 'Caminho do RetroArch',
               description: 'Executável do RetroArch usado para iniciar os '
-                  'jogos. Se vazio, é procurado automaticamente no PATH.',
-              display: () => s.getRetroArchPath() ?? 'auto-detectado',
+                  'jogos. Se vazio, é procurado automaticamente no PATH, '
+                  'em pastas comuns de instalação e no Flatpak/snap.',
+              display: () {
+                final override = _svc.settings.getRetroArchPath();
+                if (override != null && override.isNotEmpty) return override;
+                return _retroArch ?? 'não encontrado';
+              },
               onConfirm: () async {
                 final result = await FilePicker.pickFiles(
                   type: FileType.custom,
@@ -180,13 +201,13 @@ class _SettingsViewState extends State<SettingsView> {
                 );
                 final path = result?.files.single.path;
                 if (path != null) {
-                  await s.setRetroArchPath(path);
-                  setState(() {});
+                  await _svc.settings.setRetroArchPath(path);
+                  setState(() => _retroArch = path);
                 }
               },
             ),
-          ],
-        ),
+        ],
+      ),
       _Category(
         label: 'Aparência',
         description: 'Tema e elementos visuais da interface.',

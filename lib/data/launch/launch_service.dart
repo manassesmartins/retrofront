@@ -77,7 +77,7 @@ class LaunchService {
   Future<String?> _resolveCommand(String raw) async {
     var cmd = raw;
     if (cmd.contains('%EMULATOR_RETROARCH%')) {
-      final path = await _findRetroArch();
+      final path = await findRetroArch();
       if (path == null) return null;
       cmd = cmd.replaceAll('%EMULATOR_RETROARCH%', _quote(path));
       cmd = cmd.replaceAll('%CORE_RETROARCH%', _quote(_coresDir(path)));
@@ -85,33 +85,98 @@ class LaunchService {
     return cmd;
   }
 
-  Future<String?> _findRetroArch() async {
+  /// Detecta o RetroArch instalado automaticamente:
+  ///   - override configurado pelo usuario tem prioridade;
+  ///   - Android: pacote do RetroArch via PackageManager (qualquer versao);
+  ///   - Windows: pastas comuns de instalacao + Steam + `where retroarch`;
+  ///   - Linux: PATH, /usr, ~/.local, snap e exports do Flatpak;
+  ///   - macOS: .app, Homebrew e `which retroarch`.
+  /// Retorna o caminho do executavel (desktop) ou o nome do pacote (Android).
+  Future<String?> findRetroArch() async {
     final override = settings.getRetroArchPath();
     if (override != null && override.trim().isNotEmpty) {
       final f = File(override.trim());
       if (f.existsSync()) return f.path;
     }
 
+    if (Platform.isAndroid) {
+      return _androidRetroArchPackage();
+    }
+    if (Platform.isIOS) return null;
+
     if (Platform.isWindows) {
-      const candidates = <String>[
-        r'C:\RetroArch-Win64\retroarch.exe',
-        r'C:\RetroArch\retroarch.exe',
-        r'C:\Program Files\RetroArch\retroarch.exe',
-      ];
-      final localAppData = Platform.environment['LOCALAPPDATA'];
-      if (localAppData != null) {
-        candidates.expand((e) => [e]);
-        final la = File('$localAppData\\RetroArch\\retroarch.exe');
-        if (la.existsSync()) return la.path;
+      for (final c in _windowsCandidates) {
+        if (File(c).existsSync()) return c;
       }
-      for (final c in candidates) {
-        final f = File(c);
-        if (f.existsSync()) return f.path;
+      return _which('retroarch');
+    }
+    if (Platform.isMacOS) {
+      for (final c in _macCandidates) {
+        if (File(c).existsSync()) return c;
       }
       return _which('retroarch');
     }
 
+    // Linux e demais desktops.
+    for (final c in _linuxCandidates) {
+      if (File(c).existsSync()) return c;
+    }
     return _which('retroarch');
+  }
+
+  Future<String?> _androidRetroArchPackage() async {
+    const channel = MethodChannel('retrofront/launcher');
+    try {
+      final pkg = await channel.invokeMethod<String?>('detectRetroArch');
+      return (pkg == null || pkg.isEmpty) ? null : pkg;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<String> get _windowsCandidates {
+    String env(String key) => Platform.environment[key] ?? '';
+    final local = env('LOCALAPPDATA');
+    final pf = env('PROGRAMFILES');
+    final pf86 = env('PROGRAMFILES(X86)');
+    return [
+      if (local.isNotEmpty) '$local\\RetroArch\\retroarch.exe',
+      if (pf.isNotEmpty) '$pf\\RetroArch\\retroarch.exe',
+      if (pf.isNotEmpty) '$pf\\RetroArch-Win64\\retroarch.exe',
+      if (pf86.isNotEmpty) '$pf86\\RetroArch\\retroarch.exe',
+      if (pf86.isNotEmpty)
+        '$pf86\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
+      if (pf.isNotEmpty) '$pf\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
+      r'C:\RetroArch-Win64\retroarch.exe',
+      r'C:\RetroArch\retroarch.exe',
+    ];
+  }
+
+  List<String> get _macCandidates {
+    final home = Platform.environment['HOME'] ?? '';
+    return [
+      '/Applications/RetroArch.app/Contents/MacOS/RetroArch',
+      if (home.isNotEmpty)
+        '$home/Applications/RetroArch.app/Contents/MacOS/RetroArch',
+      '/opt/homebrew/bin/retroarch',
+      '/usr/local/bin/retroarch',
+    ];
+  }
+
+  List<String> get _linuxCandidates {
+    final home = Platform.environment['HOME'] ?? '';
+    return [
+      if (home.isNotEmpty) '$home/.local/bin/retroarch',
+      '/usr/local/bin/retroarch',
+      '/usr/bin/retroarch',
+      '/snap/bin/retroarch',
+      if (home.isNotEmpty)
+        '$home/.local/share/flatpak/exports/bin/org.libretro.RetroArch',
+      '/var/lib/flatpak/exports/bin/org.libretro.RetroArch',
+      if (home.isNotEmpty)
+        '$home/.local/share/flatpak/exports/bin/com.libretro.RetroArch',
+      '/var/lib/flatpak/exports/bin/com.libretro.RetroArch',
+    ];
   }
 
   String _coresDir(String exe) {

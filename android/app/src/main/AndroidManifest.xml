@@ -65,6 +65,14 @@
 
     <queries>
         <package android:name="com.retroarch" />
+        <package android:name="com.retroarch.bq.plus" />
+        <!-- Permite ver/abrir atividades que abrem arquivos (usado para
+             detectar o RetroArch em qualquer versao do Android). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.DEFAULT"/>
+            <data android:mimeType="*/*"/>
+        </intent>
         <!-- Required to query activities that can process text, see:
              https://developer.android.com/training/package-visibility -->
         <intent>
