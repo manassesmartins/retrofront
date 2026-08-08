@@ -10,7 +10,7 @@ if [ ! -d "$BREW_PREFIX" ]; then
   exit 1
 fi
 
-export PATH="$BREW_PREFIX/bin:$PATH"
+export PATH="$BREW_PREFIX/bin:${FLUTTER_BIN:-$HOME/flutter/bin}:$PATH"
 export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:$BREW_PREFIX/lib/pkgconfig:$BREW_PREFIX/opt/xorgproto/share/pkgconfig"
 export LIBRARY_PATH="$BREW_PREFIX/lib"
 export LD_LIBRARY_PATH="$BREW_PREFIX/lib"

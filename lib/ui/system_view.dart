@@ -7,10 +7,15 @@ import '../gamepad/gamepad_manager.dart';
 import '../models/system.dart';
 import 'gamelist_view.dart';
 import 'settings_view.dart';
+import 'theme.dart';
+import 'widgets/console_route.dart';
+import 'widgets/cover_backdrop.dart';
+import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
-import 'widgets/system_tile.dart';
+import 'widgets/system_cover.dart';
 
-/// Tela inicial: grade de sistemas/consoles (System view do ES-DE).
+/// Tela inicial estilo console: carrossel horizontal de sistemas com destaque
+/// central, navegavel por gamepad/teclado e por gestos de toque.
 class SystemView extends StatefulWidget {
   const SystemView({super.key});
 
@@ -21,15 +26,13 @@ class SystemView extends StatefulWidget {
 class _SystemViewState extends State<SystemView> {
   AppServices get _svc => AppScope.of(context);
 
-  final ScrollController _scroll = ScrollController();
-  final Map<int, GlobalKey> _tileKeys = {};
-
+  PageController? _page;
+  double _fraction = -1;
   List<SystemEntry> _systems = [];
   int _selected = 0;
   bool _loading = true;
   bool _hasError = false;
   StreamSubscription<GamepadAction>? _gamepadSub;
-  int _columns = 1;
 
   @override
   void initState() {
@@ -41,8 +44,22 @@ class _SystemViewState extends State<SystemView> {
   @override
   void dispose() {
     _gamepadSub?.cancel();
-    _scroll.dispose();
+    _page?.dispose();
     super.dispose();
+  }
+
+  /// Recria o PageController quando a fracao de pagina muda (ex.: giro de tela).
+  PageController _ensurePage(double fraction) {
+    final c = _page;
+    if (c != null && (_fraction - fraction).abs() < 0.001) return c;
+    _page?.dispose();
+    final nc = PageController(
+      viewportFraction: fraction,
+      initialPage: _selected.clamp(0, _systems.isEmpty ? 0 : _systems.length - 1),
+    );
+    _page = nc;
+    _fraction = fraction;
+    return nc;
   }
 
   Future<void> _load() async {
@@ -58,6 +75,7 @@ class _SystemViewState extends State<SystemView> {
         _systems = systems;
         _selected = 0;
         _loading = false;
+        if (_page?.hasClients ?? false) _page!.jumpToPage(0);
       });
     } catch (_) {
       if (!mounted) return;
@@ -74,256 +92,339 @@ class _SystemViewState extends State<SystemView> {
     if (!isCurrent) return;
 
     switch (action) {
-      case GamepadAction.up:
-        _moveGrid(0, -1);
-      case GamepadAction.down:
-        _moveGrid(0, 1);
       case GamepadAction.left:
-        _moveGrid(-1, 0);
+        _moveCarousel(-1);
       case GamepadAction.right:
-        _moveGrid(1, 0);
+        _moveCarousel(1);
       case GamepadAction.confirm:
         _openSelected();
-      case GamepadAction.pageUp:
-        _movePage(-1);
-      case GamepadAction.pageDown:
-        _movePage(1);
+      case GamepadAction.up:
+      case GamepadAction.down:
+        break;
       case GamepadAction.start:
       case GamepadAction.home:
         _openSettings();
+      case GamepadAction.pageUp:
+      case GamepadAction.pageDown:
       case GamepadAction.back:
       case GamepadAction.select:
         break;
     }
   }
 
-  void _moveGrid(int dx, int dy) {
+  void _moveCarousel(int dir) {
     if (_systems.isEmpty) return;
-    final cols = _columns;
-    final total = _systems.length;
-    final rows = (total / cols).ceil();
-
-    var col = _selected % cols;
-    var row = (_selected / cols).floor();
-
-    if (dx != 0) {
-      col = (col + dx) % cols;
-      if (col < 0) col += cols;
-    }
-    if (dy != 0) {
-      row = (row + dy) % rows;
-      if (row < 0) row += rows;
-    }
-
-    var index = row * cols + col;
-    if (index >= total) index = total - 1;
-    if (index < 0) index = 0;
-    _select(index);
-  }
-
-  void _movePage(int dir) {
-    if (_systems.isEmpty) return;
-    final page = _columns;
-    _select((_selected + dir * page).clamp(0, _systems.length - 1));
+    final next = (_selected + dir).clamp(0, _systems.length - 1);
+    _select(next);
   }
 
   void _select(int index) {
+    if (index == _selected) return;
     setState(() => _selected = index);
-    _scrollToSelected();
-  }
-
-  void _scrollToSelected() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _tileKeys[_selected];
-      final ctx = key?.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          alignment: 0.5,
-        );
-      }
-    });
+    if (_page?.hasClients ?? false) {
+      _page!.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _openSelected() {
     if (_systems.isEmpty) return;
     final system = _systems[_selected];
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GamelistView(system: system),
-      ),
-    );
+    Navigator.of(context).push(consoleRoute(GamelistView(system: system)));
   }
 
   void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SettingsView()),
-    );
+    Navigator.of(context).push(consoleRoute(const SettingsView()));
   }
 
   NavCallbacks get _callbacks => NavCallbacks()
-    ..onUp = () {
-      _moveGrid(0, -1);
-    }
-    ..onDown = () {
-      _moveGrid(0, 1);
-    }
     ..onLeft = () {
-      _moveGrid(-1, 0);
+      _moveCarousel(-1);
     }
     ..onRight = () {
-      _moveGrid(1, 0);
+      _moveCarousel(1);
     }
     ..onConfirm = _openSelected
-    ..onPageUp = () {
-      _movePage(-1);
-    }
-    ..onPageDown = () {
-      _movePage(1);
-    }
     ..onStart = _openSettings
     ..onHome = _openSettings;
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final carouselH = isLandscape ? 300.0 : 220.0;
+    final tileW = (carouselH * 0.72).clamp(0.0, 250.0);
+    final fraction = (tileW * 1.65 / screenWidth).clamp(0.4, 0.85);
+    final controller = _ensurePage(fraction);
+
     return Scaffold(
       body: NavFocus(
         callbacks: _callbacks,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-                child: Row(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CoverBackdrop(
+              color: _systems.isEmpty
+                  ? AppTheme.accent
+                  : AppTheme.systemColor(_systems[_selected].name),
+            ),
+            if (_loading)
+              const Center(
+                child: CircularProgressIndicator(color: AppTheme.accent),
+              )
+            else if (_hasError)
+              _Message(
+                icon: Icons.error_outline,
+                title: 'Erro ao ler a biblioteca',
+                message: 'Não foi possível acessar a pasta de ROMs.',
+                actionLabel: 'Tentar novamente',
+                onAction: _load,
+              )
+            else if (_systems.isEmpty)
+              _Message(
+                icon: Icons.folder_off_outlined,
+                title: 'Nenhum sistema encontrado',
+                message: 'Crie subpastas com o nome de cada console na sua '
+                    'pasta de ROMs (ex.: nes, snes, psx, gba) e coloque os '
+                    'jogos dentro.\nDepois toque em Atualizar ou configure a '
+                    'pasta em Configurações.',
+                actionLabel: 'Configurar pasta de ROMs',
+                onAction: _openSettings,
+              )
+            else
+              SafeArea(
+                child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF8B5CF6),
-                            Color(0xFF22D3EE),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.sports_esports,
-                        color: Colors.white,
-                        size: 28,
+                    _TopBar(onRefresh: _load, onSettings: _openSettings),
+                    Expanded(child: _InfoPanel(system: _systems[_selected])),
+                    SizedBox(
+                      height: isLandscape ? 300 : 220,
+                      child: _Carousel(
+                        controller: controller,
+                        fraction: fraction,
+                        systems: _systems,
+                        selected: _selected,
+                        onSelect: _select,
+                        onOpen: _openSelected,
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'RetroFront',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          Text(
-                            'Sua biblioteca retrô',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Atualizar',
-                      onPressed: _load,
-                      icon: const Icon(Icons.refresh),
-                      color: Colors.white70,
-                    ),
-                    IconButton(
-                      tooltip: 'Configurações',
-                      onPressed: _openSettings,
-                      icon: const Icon(Icons.settings),
-                      color: Colors.white70,
+                    const HintBar(
+                      hints: [
+                        Hint('◄ ►  navegar'),
+                        Hint('toque/A  entrar'),
+                        Hint('Start  opções'),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Colors.white10),
-              Expanded(child: _buildBody()),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF8B5CF6)),
-      );
-    }
-    if (_hasError) {
-      return _Message(
-        icon: Icons.error_outline,
-        title: 'Erro ao ler a biblioteca',
-        message: 'Não foi possível acessar a pasta de ROMs.',
-        actionLabel: 'Tentar novamente',
-        onAction: _load,
-      );
-    }
-    if (_systems.isEmpty) {
-      return _Message(
-        icon: Icons.folder_off_outlined,
-        title: 'Nenhum sistema encontrado',
-        message: 'Crie subpastas com o nome de cada console em sua pasta de '
-            'ROMs (ex.: nes, snes, psx, gba) e coloque os jogos dentro.\n'
-            'Depois toque em Atualizar ou configure a pasta em Configurações.',
-        actionLabel: 'Configurar pasta de ROMs',
-        onAction: _openSettings,
-      );
-    }
+class _TopBar extends StatelessWidget {
+  final VoidCallback onRefresh;
+  final VoidCallback onSettings;
 
+  const _TopBar({required this.onRefresh, required this.onSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppTheme.accent, AppTheme.accentAlt],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.sports_esports, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'RetroFront',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Atualizar',
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+            color: Colors.white70,
+          ),
+          IconButton(
+            tooltip: 'Configurações',
+            onPressed: onSettings,
+            icon: const Icon(Icons.settings),
+            color: Colors.white70,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoPanel extends StatelessWidget {
+  final SystemEntry system;
+
+  const _InfoPanel({required this.system});
+
+  @override
+  Widget build(BuildContext context) {
+    final def = system.definition;
+    final isLandscape =
+        MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, isLandscape ? 8 : 12, 24, 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOut,
+            child: Text(
+              system.fullName,
+              key: ValueKey(system.name),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: isLandscape ? 52 : 34,
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (def.manufacturer.isNotEmpty) ...[
+                _MetaText(def.manufacturer),
+                const _Dot(),
+              ],
+              if (def.releaseYear != null) ...[
+                _MetaText('${def.releaseYear}'),
+                const _Dot(),
+              ],
+              _MetaText(
+                '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
+              ),
+            ],
+          ),
+          if (!isLandscape) const SizedBox(height: 6),
+          const Text(
+            'Selecione um console e aperte para explorar sua biblioteca.',
+            style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaText extends StatelessWidget {
+  final String text;
+
+  const _MetaText(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: AppTheme.textSecondary,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 10),
+      child: Text('•', style: TextStyle(color: AppTheme.accent, fontSize: 14)),
+    );
+  }
+}
+
+class _Carousel extends StatelessWidget {
+  final PageController controller;
+  final double fraction;
+  final List<SystemEntry> systems;
+  final int selected;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onOpen;
+
+  const _Carousel({
+    required this.controller,
+    required this.fraction,
+    required this.systems,
+    required this.selected,
+    required this.onSelect,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxTileWidth = 220.0;
-        final columns = (constraints.maxWidth / maxTileWidth).floor().clamp(1, 8);
-        if (columns != _columns) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _columns = columns);
-          });
-        }
+        final carouselH = constraints.maxHeight;
+        final tileW = (carouselH * 0.72).clamp(0.0, 250.0);
 
-        final total = _systems.length;
-        return GridView.builder(
-          controller: _scroll,
-          padding: const EdgeInsets.all(20),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: maxTileWidth,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childAspectRatio: 1.55,
-          ),
-          itemCount: total,
+        return PageView.builder(
+          controller: controller,
+          itemCount: systems.length,
+          padEnds: false,
+          onPageChanged: (i) {
+            if (i != selected) onSelect(i);
+          },
           itemBuilder: (context, index) {
-            final key = GlobalKey();
-            _tileKeys[index] = key;
-            return KeyedSubtree(
-              key: key,
-              child: SystemTile(
-                system: _systems[index],
-                selected: index == _selected,
-                onTap: () {
-                  setState(() => _selected = index);
-                  _openSelected();
-                },
+            final system = systems[index];
+            return Center(
+              child: SizedBox(
+                width: tileW,
+                height: carouselH,
+                child: SystemCover(
+                  name: system.name,
+                  fullName: system.fullName,
+                  color: AppTheme.systemColor(system.name),
+                  gameCount: system.gameCount,
+                  selected: index == selected,
+                  onTap: () {
+                    if (index == selected) {
+                      onOpen();
+                    } else {
+                      onSelect(index);
+                    }
+                  },
+                ),
               ),
             );
           },

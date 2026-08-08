@@ -1,12 +1,48 @@
 import 'package:flutter/material.dart';
 
-/// Tema escuro e moderno da interface, leve e com acentos vibrantes.
+/// Tema "console" da interface: tela cheia, escura, alta contraste e capas em
+/// destaque — estilo ES-DE/EmulationStation. Leve e com acentos vibrantes.
 class AppTheme {
-  static const Color background = Color(0xFF0D1017);
-  static const Color surface = Color(0xFF171C26);
-  static const Color surfaceHigh = Color(0xFF1F2633);
+  static const Color background = Color(0xFF0A0C12);
+  static const Color surface = Color(0xFF141823);
+  static const Color surfaceHigh = Color(0xFF1E2432);
   static const Color accent = Color(0xFF8B5CF6);
   static const Color accentAlt = Color(0xFF22D3EE);
+
+  static const Color textPrimary = Color(0xFFF4F5F9);
+  static const Color textSecondary = Color(0xFFB4BAC9);
+  static const Color textFaint = Color(0xFF6E7687);
+
+  /// Cor de destaque deterministica por sistema (nome) para o carrossel.
+  static Color systemColor(String systemName) {
+    var hash = 0;
+    for (final c in systemName.codeUnits) {
+      hash = (hash * 31 + c) & 0x7fffffff;
+    }
+    return tilePalette[hash % tilePalette.length];
+  }
+
+  /// Gradiente de fundo suave para um sistema sem capa.
+  static LinearGradient systemGradient(Color base) {
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color.lerp(base, const Color(0xFF0A0C12), 0.35)!,
+        Color.lerp(base, const Color(0xFF0A0C12), 0.72)!,
+        const Color(0xFF0A0C12),
+      ],
+      stops: const [0.0, 0.55, 1.0],
+    );
+  }
+
+  /// Escurece uma cor para overlays/gradientes.
+  static Color darken(Color c, double amount) {
+    final hsl = HSLColor.fromColor(c);
+    return hsl
+        .withLightness((hsl.lightness * (1 - amount)).clamp(0.0, 1.0))
+        .toColor();
+  }
 
   static const List<Color> tilePalette = [
     Color(0xFF8B5CF6),

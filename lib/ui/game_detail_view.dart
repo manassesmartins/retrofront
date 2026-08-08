@@ -8,6 +8,8 @@ import '../gamepad/gamepad_manager.dart';
 import '../models/game.dart';
 import '../models/game_entry.dart';
 import '../models/system.dart';
+import 'theme.dart';
+import 'widgets/cover_backdrop.dart';
 import 'widgets/cover_image.dart';
 import 'widgets/nav_key_handler.dart';
 import 'widgets/star_rating.dart';
@@ -157,66 +159,101 @@ class _GameDetailViewState extends State<GameDetailView> {
     final isWide = MediaQuery.of(context).size.width > 760;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          color: Colors.white70,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          widget.system.fullName,
-          style: const TextStyle(fontSize: 16),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
       body: NavFocus(
         callbacks: _callbacks,
-        child: Scrollbar(
-          controller: _scroll,
-          child: SingleChildScrollView(
-            controller: _scroll,
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: isWide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _Cover(meta: meta, title: title, width: 260),
-                          const SizedBox(width: 32),
-                          Expanded(
-                            child: _Details(
-                              title: title,
-                              meta: meta,
-                              year: year,
-                              system: widget.system,
-                              scraping: _scraping,
-                              onPlay: _play,
-                              onScrape: _scrapeGame,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CoverBackdrop(
+              coverPath: meta?.coverPath,
+              color: AppTheme.systemColor(widget.system.name),
+            ),
+            SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Voltar',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.arrow_back),
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            widget.system.fullName,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(child: _Cover(meta: meta, title: title, width: 200)),
-                          const SizedBox(height: 24),
-                          _Details(
-                            title: title,
-                            meta: meta,
-                            year: year,
-                            system: widget.system,
-                            scraping: _scraping,
-                            onPlay: _play,
-                            onScrape: _scrapeGame,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Scrollbar(
+                      controller: _scroll,
+                      child: SingleChildScrollView(
+                        controller: _scroll,
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1100),
+                            child: isWide
+                                ? Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _Cover(meta: meta, title: title, width: 260),
+                                      const SizedBox(width: 32),
+                                      Expanded(
+                                        child: _Details(
+                                          title: title,
+                                          meta: meta,
+                                          year: year,
+                                          system: widget.system,
+                                          scraping: _scraping,
+                                          onPlay: _play,
+                                          onScrape: _scrapeGame,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Center(
+                                        child: _Cover(
+                                            meta: meta, title: title, width: 200),
+                                      ),
+                                      const SizedBox(height: 24),
+                                      _Details(
+                                        title: title,
+                                        meta: meta,
+                                        year: year,
+                                        system: widget.system,
+                                        scraping: _scraping,
+                                        onPlay: _play,
+                                        onScrape: _scrapeGame,
+                                      ),
+                                    ],
+                                  ),
                           ),
-                        ],
+                        ),
                       ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

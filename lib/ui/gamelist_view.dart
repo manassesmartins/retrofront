@@ -7,11 +7,19 @@ import '../gamepad/gamepad_manager.dart';
 import '../models/game_entry.dart';
 import '../models/system.dart';
 import 'game_detail_view.dart';
-import 'widgets/game_tile.dart';
+import 'theme.dart';
+import 'widgets/console_route.dart';
+import 'widgets/cover_backdrop.dart';
+import 'widgets/cover_image.dart';
+import 'widgets/game_list_row.dart';
+import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
 import 'widgets/scrape_progress_dialog.dart';
+import 'widgets/star_rating.dart';
 
-/// Grade de jogos de um sistema, com capas, subpastas, busca e scraping.
+/// Lista de jogos de um sistema estilo console: menu a esquerda com o jogo
+/// selecionado em destaque (capa grande + metadados) a direita/abaixo.
+/// Navegavel por gamepad/teclado e por toque.
 class GamelistView extends StatefulWidget {
   final SystemEntry system;
   final String? subPath;
@@ -32,16 +40,17 @@ class _GamelistViewState extends State<GamelistView> {
   AppServices get _svc => AppScope.of(context);
 
   final ScrollController _scroll = ScrollController();
-  final Map<int, GlobalKey> _tileKeys = {};
   final TextEditingController _search = TextEditingController();
+  final Map<int, GlobalKey> _rowKeys = {};
 
   List<GameEntry> _games = [];
   List<GameEntry> _filtered = [];
   int _selected = 0;
   bool _loading = true;
   bool _searching = false;
-  int _columns = 1;
   StreamSubscription<GamepadAction>? _gamepadSub;
+
+  static const int _pageStep = 8;
 
   @override
   void initState() {
@@ -83,9 +92,7 @@ class _GamelistViewState extends State<GamelistView> {
     if (q.isEmpty) {
       _filtered = List.of(_games);
     } else {
-      _filtered = _games
-          .where((g) => g.name.toLowerCase().contains(q))
-          .toList();
+      _filtered = _games.where((g) => g.name.toLowerCase().contains(q)).toList();
     }
     if (_selected >= _filtered.length && _filtered.isNotEmpty) {
       _selected = 0;
@@ -106,64 +113,42 @@ class _GamelistViewState extends State<GamelistView> {
 
     switch (action) {
       case GamepadAction.up:
-        _moveGrid(0, -1);
+        _move(-1);
       case GamepadAction.down:
-        _moveGrid(0, 1);
-      case GamepadAction.left:
-        _moveGrid(-1, 0);
-      case GamepadAction.right:
-        _moveGrid(1, 0);
+        _move(1);
+      case GamepadAction.pageUp:
+        _move(-_pageStep);
+      case GamepadAction.pageDown:
+        _move(_pageStep);
       case GamepadAction.confirm:
         _openSelected();
       case GamepadAction.back:
         _goBack();
       case GamepadAction.start:
         _openMenu();
-      case GamepadAction.pageUp:
-        _movePage(-1);
-      case GamepadAction.pageDown:
-        _movePage(1);
       case GamepadAction.home:
         Navigator.of(context).popUntil((r) => r.isFirst);
+      case GamepadAction.left:
+      case GamepadAction.right:
       case GamepadAction.select:
         break;
     }
   }
 
-  void _moveGrid(int dx, int dy) {
+  void _move(int delta) {
     if (_filtered.isEmpty) return;
-    final cols = _columns;
-    final total = _filtered.length;
-    final rows = (total / cols).ceil();
-
-    var col = _selected % cols;
-    var row = (_selected / cols).floor();
-
-    if (dx != 0) {
-      col = (col + dx) % cols;
-      if (col < 0) col += cols;
-    }
-    if (dy != 0) {
-      row = (row + dy) % rows;
-      if (row < 0) row += rows;
-    }
-
-    var index = row * cols + col;
-    index = index.clamp(0, total - 1);
-    setState(() => _selected = index);
-    _scrollToSelected();
+    final index = (_selected + delta).clamp(0, _filtered.length - 1);
+    _select(index);
   }
 
-  void _movePage(int dir) {
-    if (_filtered.isEmpty) return;
-    final index = (_selected + dir * _columns).clamp(0, _filtered.length - 1);
+  void _select(int index) {
     setState(() => _selected = index);
     _scrollToSelected();
   }
 
   void _scrollToSelected() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _tileKeys[_selected];
+      final key = _rowKeys[_selected];
       final ctx = key?.currentContext;
       if (ctx != null) {
         Scrollable.ensureVisible(
@@ -181,8 +166,8 @@ class _GamelistViewState extends State<GamelistView> {
     final entry = _filtered[_selected];
     if (entry.isFolder) {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => GamelistView(
+        consoleRoute(
+          GamelistView(
             system: widget.system,
             subPath: entry.path,
             folderTitle: entry.name,
@@ -191,12 +176,31 @@ class _GamelistViewState extends State<GamelistView> {
       );
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GameDetailView(
-          system: widget.system,
-          game: entry,
+    _play(entry);
+  }
+
+  Future<void> _play(GameEntry game) async {
+    final result =
+        await _svc.launcher.launch(widget.system.definition, game);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.ok
+              ? 'Iniciando ${game.name}...'
+              : (result.error ?? 'Erro ao iniciar'),
         ),
+      ),
+    );
+  }
+
+  void _openDetails() {
+    if (_filtered.isEmpty) return;
+    final entry = _filtered[_selected];
+    if (entry.isFolder) return;
+    Navigator.of(context).push(
+      consoleRoute(
+        GameDetailView(system: widget.system, game: entry),
       ),
     );
   }
@@ -210,7 +214,7 @@ class _GamelistViewState extends State<GamelistView> {
   void _openMenu() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF171C26),
+      backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -231,7 +235,7 @@ class _GamelistViewState extends State<GamelistView> {
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.cloud_download, color: Color(0xFF8B5CF6)),
+                leading: const Icon(Icons.cloud_download, color: AppTheme.accent),
                 title: const Text('Baixar capas e informações',
                     style: TextStyle(color: Colors.white)),
                 subtitle: const Text('Scraping em rede para todos os jogos',
@@ -242,7 +246,7 @@ class _GamelistViewState extends State<GamelistView> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.search, color: Color(0xFF22D3EE)),
+                leading: const Icon(Icons.search, color: AppTheme.accentAlt),
                 title: const Text('Buscar',
                     style: TextStyle(color: Colors.white)),
                 onTap: () {
@@ -293,185 +297,437 @@ class _GamelistViewState extends State<GamelistView> {
 
   NavCallbacks get _callbacks => NavCallbacks()
     ..onUp = () {
-      _moveGrid(0, -1);
+      _move(-1);
     }
     ..onDown = () {
-      _moveGrid(0, 1);
+      _move(1);
     }
-    ..onLeft = () {
-      _moveGrid(-1, 0);
+    ..onPageUp = () {
+      _move(-_pageStep);
     }
-    ..onRight = () {
-      _moveGrid(1, 0);
+    ..onPageDown = () {
+      _move(_pageStep);
     }
     ..onConfirm = _openSelected
     ..onBack = _goBack
     ..onStart = _openMenu
-    ..onPageUp = () {
-      _movePage(-1);
-    }
-    ..onPageDown = () {
-      _movePage(1);
-    }
     ..onHome = () {
       Navigator.of(context).popUntil((r) => r.isFirst);
     };
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
     final title = widget.folderTitle ?? widget.system.fullName;
+    final selected = _filtered.isNotEmpty ? _filtered[_selected] : null;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          color: Colors.white70,
-          onPressed: _goBack,
-        ),
-        title: Row(
+      body: NavFocus(
+        callbacks: _callbacks,
+        enabled: !_searching,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Flexible(
-              child: Text(
-                title,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 18),
+            CoverBackdrop(
+              coverPath: selected?.metadata?.coverPath,
+              color: AppTheme.systemColor(widget.system.name),
+            ),
+            SafeArea(
+              child: Column(
+                children: [
+                  _Header(
+                    title: title,
+                    searching: _searching,
+                    searchController: _search,
+                    onBack: _goBack,
+                    onToggleSearch: () {
+                      setState(() {
+                        _searching = !_searching;
+                        if (!_searching) _search.clear();
+                        _applyFilter();
+                      });
+                    },
+                    onMenu: _openMenu,
+                    onSearchChanged: _onSearchChanged,
+                  ),
+                  Expanded(
+                    child: _loading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppTheme.accent,
+                            ),
+                          )
+                        : _filtered.isEmpty
+                            ? _EmptyState(searching: _searching)
+                            : isLandscape
+                                ? Row(
+                                    children: [
+                                      SizedBox(
+                                        width: MediaQuery.of(context).size.width *
+                                            0.42,
+                                        child: _buildList(),
+                                      ),
+                                      Expanded(
+                                        child: _DetailPanel(
+                                          entry: selected!,
+                                          onPlay: () => _openSelected(),
+                                          onOpenFolder: _openSelected,
+                                          onDetails: _openDetails,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    children: [
+                                      Expanded(child: _buildList()),
+                                      SizedBox(
+                                        height: 240,
+                                        child: _DetailPanel(
+                                          entry: selected!,
+                                          onPlay: () => _openSelected(),
+                                          onOpenFolder: _openSelected,
+                                          onDetails: _openDetails,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                  ),
+                  const HintBar(
+                    hints: [
+                      Hint('▲▼  navegar'),
+                      Hint('A / toque na capa  jogar'),
+                      Hint('B  voltar'),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Buscar',
-            onPressed: () => setState(() => _searching = !_searching),
-            icon: const Icon(Icons.search),
-            color: Colors.white70,
-          ),
-          IconButton(
-            tooltip: 'Opções',
-            onPressed: _openMenu,
-            icon: const Icon(Icons.more_vert),
-            color: Colors.white70,
-          ),
-        ],
-        bottom: _searching
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(64),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: TextField(
-                    controller: _search,
-                    autofocus: true,
-                    onChanged: _onSearchChanged,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'Buscar jogo...',
-                      hintStyle: TextStyle(color: Colors.white38),
-                      prefixIcon: Icon(Icons.search, color: Colors.white38),
-                    ),
-                  ),
-                ),
-              )
-            : null,
-      ),
-      body: NavFocus(
-        callbacks: _callbacks,
-        child: _buildBody(),
       ),
     );
   }
 
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF8B5CF6)),
-      );
-    }
+  Widget _buildList() {
+    return ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+      itemCount: _filtered.length,
+      itemBuilder: (context, index) {
+        final key = GlobalKey();
+        _rowKeys[index] = key;
+        final game = _filtered[index];
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: KeyedSubtree(
+            key: key,
+            child: GameListRow(
+              game: game,
+              selected: index == _selected,
+              onTap: () {
+                if (game.isFolder) {
+                  _select(index);
+                  _openSelected();
+                } else {
+                  _select(index);
+                }
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
 
-    if (_filtered.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+class _Header extends StatelessWidget {
+  final String title;
+  final bool searching;
+  final TextEditingController searchController;
+  final VoidCallback onBack;
+  final VoidCallback onToggleSearch;
+  final VoidCallback onMenu;
+  final ValueChanged<String> onSearchChanged;
+
+  const _Header({
+    required this.title,
+    required this.searching,
+    required this.searchController,
+    required this.onBack,
+    required this.onToggleSearch,
+    required this.onMenu,
+    required this.onSearchChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+          child: Row(
             children: [
-              Icon(
-                _search.text.isEmpty
-                    ? Icons.inbox_outlined
-                    : Icons.search_off,
-                size: 56,
-                color: Colors.white38,
+              IconButton(
+                tooltip: 'Voltar',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back),
+                color: Colors.white70,
               ),
-              const SizedBox(height: 16),
-              Text(
-                _search.text.isEmpty
-                    ? 'Nenhum jogo nesta pasta'
-                    : 'Nada encontrado para "${_search.text}"',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
-              if (_search.text.isEmpty) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'Coloque os arquivos de ROM nesta pasta e toque em Atualizar, '
-                  'ou use "Baixar capas e informações" para enriquecer os jogos.',
-                  style: TextStyle(color: Colors.white54, fontSize: 13),
-                  textAlign: TextAlign.center,
+              IconButton(
+                tooltip: 'Buscar',
+                onPressed: onToggleSearch,
+                icon: Icon(
+                  searching ? Icons.close : Icons.search,
+                  color: Colors.white70,
                 ),
-              ],
+              ),
+              IconButton(
+                tooltip: 'Opções',
+                onPressed: onMenu,
+                icon: const Icon(Icons.more_vert),
+                color: Colors.white70,
+              ),
             ],
           ),
         ),
-      );
-    }
-
-    final forcedColumns = _svc.settings.getGridColumns();
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxTileWidth = 170.0;
-        final autoColumns =
-            (constraints.maxWidth / maxTileWidth).floor().clamp(1, 10);
-        final columns = forcedColumns > 0 ? forcedColumns : autoColumns;
-        if (columns != _columns) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _columns = columns);
-          });
-        }
-
-        final tileKeys = <int, GlobalKey>{};
-        return GridView.builder(
-          controller: _scroll,
-          padding: const EdgeInsets.all(16),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: maxTileWidth,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 0.62,
-          ),
-          itemCount: _filtered.length,
-          itemBuilder: (context, index) {
-            final key = GlobalKey();
-            tileKeys[index] = key;
-            _tileKeys[index] = key;
-            final game = _filtered[index];
-            return KeyedSubtree(
-              key: key,
-              child: GameTile(
-                game: game,
-                selected: index == _selected,
-                onTap: () {
-                  setState(() => _selected = index);
-                  _openSelected();
-                },
+        if (searching)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: searchController,
+              autofocus: true,
+              onChanged: onSearchChanged,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Buscar jogo...',
+                hintStyle: TextStyle(color: Colors.white38),
+                prefixIcon: Icon(Icons.search, color: Colors.white38),
               ),
-            );
-          },
-        );
-      },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _DetailPanel extends StatelessWidget {
+  final GameEntry entry;
+  final VoidCallback onPlay;
+  final VoidCallback onOpenFolder;
+  final VoidCallback onDetails;
+
+  const _DetailPanel({
+    required this.entry,
+    required this.onPlay,
+    required this.onOpenFolder,
+    required this.onDetails,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      child: entry.isFolder ? _folderPanel() : _gamePanel(context),
+    );
+  }
+
+  Widget _folderPanel() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.folder, color: Colors.white54, size: 56),
+          const SizedBox(height: 10),
+          Text(
+            entry.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onOpenFolder,
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Abrir pasta'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _gamePanel(BuildContext context) {
+    final meta = entry.metadata;
+    final year = meta?.releaseDate != null && meta!.releaseDate!.length >= 4
+        ? meta.releaseDate!.substring(0, 4)
+        : null;
+    final genre = meta?.genre;
+    final players = meta?.players;
+    final isLandscape =
+        MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
+
+    final cover = Center(
+      child: SizedBox(
+        width: isLandscape ? 180 : 120,
+        child: AspectRatio(
+          aspectRatio: 3 / 4,
+          child: CoverImage(
+            path: meta?.coverPath,
+            width: isLandscape ? 180 : 120,
+            borderRadius: BorderRadius.circular(14),
+            fallbackLabel: entry.name,
+          ),
+        ),
+      ),
+    );
+
+    final info = Column(
+      mainAxisAlignment: isLandscape
+          ? MainAxisAlignment.center
+          : MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          entry.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: isLandscape ? 24 : 16,
+            fontWeight: FontWeight.w800,
+            height: 1.15,
+          ),
+        ),
+        if (year != null || genre != null || players != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            [genre, year, players].whereType<String>().join(' • '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+        ],
+        if (meta?.rating != null) ...[
+          const SizedBox(height: 6),
+          StarRating(rating: meta!.rating!, size: 16),
+        ],
+        if (meta?.description != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            meta!.description!,
+            maxLines: isLandscape ? 4 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            FilledButton.icon(
+              onPressed: onPlay,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Jogar'),
+            ),
+            const SizedBox(width: 10),
+            IconButton(
+              tooltip: 'Mais informações',
+              onPressed: onDetails,
+              icon: const Icon(Icons.info_outline),
+              color: Colors.white70,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: isLandscape
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                cover,
+                const SizedBox(height: 16),
+                Flexible(child: SingleChildScrollView(child: info)),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                cover,
+                const SizedBox(width: 14),
+                Expanded(child: info),
+              ],
+            ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool searching;
+
+  const _EmptyState({required this.searching});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              searching ? Icons.search_off : Icons.inbox_outlined,
+              size: 56,
+              color: Colors.white38,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              searching ? 'Nada encontrado' : 'Nenhum jogo nesta pasta',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (!searching) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Coloque os arquivos de ROM nesta pasta e toque em Atualizar '
+                '(menu ●●●), ou use "Baixar capas e informações".',
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
