@@ -313,6 +313,7 @@ class _Details extends StatelessWidget {
     final meta = this.meta;
     final genre = meta?.genre;
     final publisher = meta?.publisher ?? meta?.developer;
+    final showRatings = AppScope.of(context).settings.getShowRatings();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,7 +339,7 @@ class _Details extends StatelessWidget {
             if (meta?.players != null) _chip('${meta!.players} jogadores'),
           ],
         ),
-        if (meta?.rating != null) ...[
+        if (showRatings && meta?.rating != null) ...[
           const SizedBox(height: 12),
           StarRating(rating: meta!.rating!, size: 20),
         ],

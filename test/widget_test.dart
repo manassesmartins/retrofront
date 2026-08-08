@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gamepads/gamepads.dart' show GamepadButton;
 
 import 'package:retrofront/data/gamelist/gamelist_repository.dart';
 import 'package:retrofront/data/roms/rom_scanner.dart';
@@ -166,6 +167,35 @@ void main() {
       // Se a fonte nao fosse limpa, repetiria em ~300ms.
       await Future<void>.delayed(const Duration(milliseconds: 400));
       expect(actions.length, beforeRelease);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('esquema de botoes Nintendo troca A/B', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.setButtonScheme('standard');
+      manager.handleButtonForTest(GamepadButton.a);
+      manager.handleButtonForTest(GamepadButton.a, release: true);
+      manager.handleButtonForTest(GamepadButton.b);
+      manager.handleButtonForTest(GamepadButton.b, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, [GamepadAction.confirm, GamepadAction.back]);
+
+      // Aguarda o cooldown entre as fases.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      actions.clear();
+
+      manager.setButtonScheme('nintendo');
+      manager.handleButtonForTest(GamepadButton.a);
+      manager.handleButtonForTest(GamepadButton.a, release: true);
+      manager.handleButtonForTest(GamepadButton.b);
+      manager.handleButtonForTest(GamepadButton.b, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, [GamepadAction.back, GamepadAction.confirm]);
 
       await sub.cancel();
       manager.dispose();

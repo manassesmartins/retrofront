@@ -165,6 +165,11 @@ class GamepadManager {
     _handleInput(source, action, true);
   }
 
+  /// Hook de teste: simula um toque de um botao fisico (usa o mapeamento real).
+  void handleButtonForTest(GamepadButton button, {bool release = false}) {
+    _handleInput('btest:$button', _actionForButton(button), !release);
+  }
+
   void _scheduleRepeat(Duration delay) {
     _repeatTimer = Timer(delay, () {
       _repeatTimer = null;
@@ -186,6 +191,14 @@ class GamepadManager {
     _repeatInterval = interval;
   }
 
+  bool _nintendoLayout = false;
+
+  /// Define o esquema de botoes: 'standard' (Xbox/Sony: A=confirmar,
+  /// B=voltar) ou 'nintendo' (estilo RetroArch: A/B trocados).
+  void setButtonScheme(String scheme) {
+    _nintendoLayout = scheme == 'nintendo';
+  }
+
   bool _isDirectional(GamepadAction a) =>
       a == GamepadAction.up ||
       a == GamepadAction.down ||
@@ -195,9 +208,9 @@ class GamepadManager {
   GamepadAction? _actionForButton(GamepadButton b) {
     switch (b) {
       case GamepadButton.a:
-        return GamepadAction.confirm;
+        return _nintendoLayout ? GamepadAction.back : GamepadAction.confirm;
       case GamepadButton.b:
-        return GamepadAction.back;
+        return _nintendoLayout ? GamepadAction.confirm : GamepadAction.back;
       case GamepadButton.x:
         return GamepadAction.pageUp;
       case GamepadButton.y:

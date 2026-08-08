@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/app_dirs.dart';
 import '../../models/game_entry.dart';
@@ -47,7 +48,14 @@ class LaunchService {
       );
     }
 
-    final tokens = _tokenize(command.replaceAll('%ROM%', game.path));
+    // Argumentos extras configurados pelo usuario (inseridos antes da ROM).
+    var cmd = command;
+    final extra = settings.getRetroArchArgs();
+    if (extra != null && extra.trim().isNotEmpty) {
+      cmd = cmd.replaceAll('%ROM%', '$extra %ROM%');
+    }
+
+    final tokens = _tokenize(cmd.replaceAll('%ROM%', _quote(game.path)));
     if (tokens.isEmpty) {
       return const LaunchResult.failure('Comando vazio.');
     }
@@ -180,8 +188,37 @@ class LaunchService {
   }
 
   String _coresDir(String exe) {
+    // RetroArch via Flatpak: os cores ficam na pasta de configuracao do app
+    // (~/.var/app/<id>/config/retroarch/cores) ou empacotados no sandbox.
+    final flatpakId = _flatpakIdOf(exe);
+    if (flatpakId.isNotEmpty) {
+      final home = Platform.environment['HOME'] ?? '';
+      final varDir = p.join(
+        home,
+        '.var',
+        'app',
+        flatpakId,
+        'config',
+        'retroarch',
+        'cores',
+      );
+      if (Directory(varDir).existsSync()) return varDir;
+      return '/app/lib/retroarch/cores';
+    }
     final dir = File(exe).parent.path;
     return '$dir${Platform.isWindows ? r'\cores' : '/cores'}';
+  }
+
+  /// Se [exe] e um launcher do Flatpak (ex.: ~/.local/share/flatpak/exports/
+  /// bin/org.libretro.RetroArch), devolve o id do app (org.libretro.RetroArch).
+  String _flatpakIdOf(String exe) {
+    final name = p.basename(exe);
+    if (name.startsWith('com.') ||
+        name.startsWith('org.') ||
+        name.startsWith('net.')) {
+      if (exe.contains('/flatpak/exports/bin/')) return name;
+    }
+    return '';
   }
 
   Future<String?> _which(String name) async {

@@ -7,24 +7,34 @@ class SettingsService {
   static const _kTheGamesDbKey = 'thegamesdb_key';
   static const _kGridColumns = 'grid_columns';
   static const _kRetroArchPath = 'retroarch_path';
+  static const _kRetroArchArgs = 'retroarch_args';
   static const _kDarkMode = 'dark_mode';
   static const _kGamepadRepeatMs = 'gamepad_repeat_ms';
   static const _kFullscreen = 'fullscreen';
   static const _kLandscapeLock = 'landscape_lock';
   static const _kShowHints = 'show_hints';
   static const _kScrapeProvider = 'scrape_provider';
+  static const _kGameSort = 'game_sort';
+  static const _kShowGameCount = 'show_game_count';
+  static const _kShowRatings = 'show_ratings';
+  static const _kButtonScheme = 'button_scheme';
 
   static const _allowList = {
     _kRomsPath,
     _kTheGamesDbKey,
     _kGridColumns,
     _kRetroArchPath,
+    _kRetroArchArgs,
     _kDarkMode,
     _kGamepadRepeatMs,
     _kFullscreen,
     _kLandscapeLock,
     _kShowHints,
     _kScrapeProvider,
+    _kGameSort,
+    _kShowGameCount,
+    _kShowRatings,
+    _kButtonScheme,
   };
 
   SharedPreferencesWithCache? _prefs;
@@ -72,6 +82,12 @@ class SettingsService {
     return _p.setString(_kRetroArchPath, value.trim());
   }
 
+  /// Argumentos extras passados ao RetroArch antes da ROM (ex.: "--fullscreen").
+  String? getRetroArchArgs() => _p.getString(_kRetroArchArgs);
+
+  Future<void> setRetroArchArgs(String value) =>
+      _p.setString(_kRetroArchArgs, value.trim());
+
   bool getDarkMode() => _p.getBool(_kDarkMode) ?? true;
 
   Future<void> setDarkMode(bool value) => _p.setBool(_kDarkMode, value);
@@ -99,4 +115,24 @@ class SettingsService {
 
   Future<void> setScrapeProvider(String value) =>
       _p.setString(_kScrapeProvider, value);
+
+  /// Ordenacao da lista de jogos: 'name', 'name_desc', 'year' ou 'genre'.
+  String getGameSort() => _p.getString(_kGameSort) ?? 'name';
+
+  Future<void> setGameSort(String value) => _p.setString(_kGameSort, value);
+
+  bool getShowGameCount() => _p.getBool(_kShowGameCount) ?? true;
+
+  Future<void> setShowGameCount(bool value) =>
+      _p.setBool(_kShowGameCount, value);
+
+  bool getShowRatings() => _p.getBool(_kShowRatings) ?? true;
+
+  Future<void> setShowRatings(bool value) => _p.setBool(_kShowRatings, value);
+
+  /// Esquema de botoes: 'standard' (Xbox/Sony) ou 'nintendo' (A/B trocados).
+  String getButtonScheme() => _p.getString(_kButtonScheme) ?? 'standard';
+
+  Future<void> setButtonScheme(String value) =>
+      _p.setString(_kButtonScheme, value);
 }

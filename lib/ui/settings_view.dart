@@ -9,18 +9,20 @@ import '../core/app_dirs.dart';
 import '../core/app_scope.dart';
 import '../core/screen_mode.dart';
 import '../gamepad/gamepad_manager.dart';
+import 'settings_category_view.dart';
+import 'settings_options.dart';
 import 'theme.dart';
+import 'widgets/console_route.dart';
 import 'widgets/cover_backdrop.dart';
 import 'widgets/cover_carousel.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
 
-/// Configuracoes estilo console, categorizadas em um carrossel horizontal
-/// (mesmo comportamento da tela de sistemas: distancia fixa entre os tiles e
-/// mais itens visiveis em telas maiores). Navegacao por gamepad/teclado:
+/// Tela de Configurações estilo console: carrossel horizontal de categorias.
+/// Cada categoria abre como uma janela própria (SettingsCategoryView), em vez
+/// de mostrar as opções empilhadas na mesma tela. Navegação:
 ///   - esquerda/direita (ou LB/RB): categoria
-///   - cima/baixo: opcao da categoria selecionada
-///   - A: ativar (liga/desliga, avanca valor ou acao)
+///   - A: abrir a categoria selecionada
 ///   - B: voltar
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -32,18 +34,13 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   AppServices get _svc => AppScope.of(context);
 
-  final ScrollController _scroll = ScrollController();
-  List<GlobalKey> _rowKeys = [];
-
-  int _category = 0;
+  List<SettingsCategory> _categories = [];
   int _selected = 0;
+  bool _loading = true;
   String _defaultRoms = '';
   String? _retroArch;
   bool _androidAccess = true;
-  bool _loading = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
-
-  List<_Category> _categories = [];
 
   @override
   void initState() {
@@ -55,7 +52,6 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     _gamepadSub?.cancel();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -70,20 +66,20 @@ class _SettingsViewState extends State<SettingsView> {
       _androidAccess = androidAccess;
       _retroArch = retroArch;
       _categories = _buildCategories();
-      _rowKeys = List.generate(_currentOptions().length, (_) => GlobalKey());
       _loading = false;
     });
   }
 
-  List<_Category> _buildCategories() {
+  List<SettingsCategory> _buildCategories() {
     final s = _svc.settings;
     return [
-      _Category(
+      SettingsCategory(
         label: 'Biblioteca',
-        description: 'Onde ficam os jogos e como o app acessa o armazenamento.',
+        description: 'Onde ficam os jogos, a ordenação da lista e como o app '
+            'acessa o armazenamento.',
         icon: Icons.video_library_outlined,
         options: [
-          _Option(
+          SettingsOption(
             label: 'Pasta de ROMs',
             description: 'Pasta principal da biblioteca. Crie uma subpasta por '
                 'console (nes, snes, gba, psx...). Se vazio, usa a pasta '
@@ -92,35 +88,56 @@ class _SettingsViewState extends State<SettingsView> {
               final custom = s.getRomsPath();
               return custom ?? _defaultRoms;
             },
-            onConfirm: () async {
+            onConfirm: (ctx) async {
               final path = await FilePicker.getDirectoryPath();
               if (path != null) {
                 await s.setRomsPath(path);
-                setState(() {});
               }
             },
           ),
           if (AndroidStorage.isNeeded)
-            _Option(
+            SettingsOption(
               label: 'Acesso aos arquivos (Android)',
               description: 'Permite ler a pasta pública /storage/emulated/0/'
                   'ROMs. No Android 11+ você precisa ativar "Permitir acesso a '
                   'todos os arquivos" na tela do sistema.',
               display: () => _androidAccess ? 'concedido' : 'pendente',
-              onConfirm: () async {
+              onConfirm: (ctx) async {
                 final granted = await AndroidStorage.request();
-                if (!mounted) return;
-                setState(() => _androidAccess = granted);
+                if (mounted) setState(() => _androidAccess = granted);
               },
             ),
+          SettingsOption(
+            label: 'Ordenar jogos por',
+            description: 'Como os jogos aparecem na lista de cada console.',
+            cycleValues: const [
+              ('name', 'Nome (A–Z)'),
+              ('name_desc', 'Nome (Z–A)'),
+              ('year', 'Ano'),
+              ('genre', 'Gênero'),
+            ],
+            currentIndex: () => _cycleIndex(
+              const ['name', 'name_desc', 'year', 'genre'],
+              s.getGameSort(),
+            ),
+            onCycle: (idx) => s.setGameSort(
+              const ['name', 'name_desc', 'year', 'genre'][idx],
+            ),
+          ),
+          SettingsOption(
+            label: 'Mostrar contagem de jogos',
+            description: 'Exibe o número de jogos nos tiles dos consoles.',
+            toggle: () => s.getShowGameCount(),
+            onToggle: (v) => s.setShowGameCount(v),
+          ),
         ],
       ),
-      _Category(
+      SettingsCategory(
         label: 'Internet',
         description: 'De onde o app baixa capas e informações dos jogos.',
         icon: Icons.cloud_download_outlined,
         options: [
-          _Option(
+          SettingsOption(
             label: 'Provedor de scraping',
             description: 'De onde o app baixa capas e informações. '
                 '"Automático" usa TheGamesDB (com chave) e '
@@ -138,7 +155,7 @@ class _SettingsViewState extends State<SettingsView> {
               const ['auto', 'thegamesdb', 'libretro'][idx],
             ),
           ),
-          _Option(
+          SettingsOption(
             label: 'Chave TheGamesDB (opcional)',
             description: 'Sem chave: apenas capas via libretro-thumbnails. '
                 'Com chave: descrição, gênero, ano e avaliação também.',
@@ -148,72 +165,96 @@ class _SettingsViewState extends State<SettingsView> {
                   ? 'não configurada'
                   : '••••${key.substring(key.length > 4 ? key.length - 4 : key.length)}';
             },
-            onConfirm: () async {
+            onConfirm: (ctx) async {
               final controller =
                   TextEditingController(text: s.getTheGamesDbKey() ?? '');
               final value = await showDialog<String>(
-                context: context,
-                builder: (ctx) => _TextPromptDialog(
+                context: ctx,
+                builder: (dialogCtx) => _TextPromptDialog(
                   title: 'Chave TheGamesDB',
                   controller: controller,
                   obscure: true,
                   onSave: () => s.setTheGamesDbKey(controller.text),
                 ),
               );
-              if (value != null) setState(() {});
+              if (value != null && mounted) setState(() {});
             },
           ),
         ],
       ),
-      _Category(
+      SettingsCategory(
         label: 'Emulador',
-        description: 'Detecção automática do RetroArch instalado no dispositivo.',
+        description: 'Detecção do RetroArch instalado e opções de inicialização.',
         icon: Icons.memory,
         options: [
           if (AppDirs.isAndroid || AppDirs.isIOS)
-            _Option(
+            SettingsOption(
               label: 'RetroArch detectado',
               description: 'O app procura o RetroArch instalado em qualquer '
                   'versão do Android/iOS automaticamente. Use A para '
                   'verificar novamente.',
               display: () => _retroArch ?? 'não instalado',
-              onConfirm: () async {
+              onConfirm: (ctx) async {
                 final detected = await _svc.launcher.findRetroArch();
-                if (!mounted) return;
-                setState(() => _retroArch = detected);
+                if (mounted) setState(() => _retroArch = detected);
               },
             )
           else
-            _Option(
+            SettingsOption(
               label: 'Caminho do RetroArch',
               description: 'Executável do RetroArch usado para iniciar os '
                   'jogos. Se vazio, é procurado automaticamente no PATH, '
                   'em pastas comuns de instalação e no Flatpak/snap.',
               display: () {
-                final override = _svc.settings.getRetroArchPath();
+                final override = s.getRetroArchPath();
                 if (override != null && override.isNotEmpty) return override;
                 return _retroArch ?? 'não encontrado';
               },
-              onConfirm: () async {
+              onConfirm: (ctx) async {
                 final result = await FilePicker.pickFiles(
                   type: FileType.custom,
                   allowedExtensions: ['exe', 'sh', 'bin'],
                 );
                 final path = result?.files.single.path;
                 if (path != null) {
-                  await _svc.settings.setRetroArchPath(path);
-                  setState(() => _retroArch = path);
+                  await s.setRetroArchPath(path);
+                  if (mounted) setState(() => _retroArch = path);
                 }
               },
             ),
+          SettingsOption(
+            label: 'Argumentos extras do RetroArch',
+            description: 'Parâmetros adicionais passados ao RetroArch antes do '
+                'jogo (ex.: --fullscreen). Se vazio, nenhum é adicionado.',
+            display: () {
+              final args = s.getRetroArchArgs();
+              return (args == null || args.isEmpty)
+                  ? 'nenhum'
+                  : args;
+            },
+            onConfirm: (ctx) async {
+              final controller =
+                  TextEditingController(text: s.getRetroArchArgs() ?? '');
+              final value = await showDialog<String>(
+                context: ctx,
+                builder: (dialogCtx) => _TextPromptDialog(
+                  title: 'Argumentos extras',
+                  controller: controller,
+                  obscure: false,
+                  onSave: () => s.setRetroArchArgs(controller.text),
+                ),
+              );
+              if (value != null && mounted) setState(() {});
+            },
+          ),
         ],
       ),
-      _Category(
+      SettingsCategory(
         label: 'Aparência',
         description: 'Tema e elementos visuais da interface.',
         icon: Icons.palette_outlined,
         options: [
-          _Option(
+          SettingsOption(
             label: 'Tema escuro',
             description: 'Usa o tema escuro "console". Desligue para o tema '
                 'claro.',
@@ -223,20 +264,27 @@ class _SettingsViewState extends State<SettingsView> {
               _svc.darkMode.value = v;
             },
           ),
-          _Option(
+          SettingsOption(
             label: 'Mostrar dicas',
             description: 'Exibe a barra de atalhos (dicas) no rodapé das telas.',
             toggle: () => s.getShowHints(),
             onToggle: (v) => s.setShowHints(v),
           ),
+          SettingsOption(
+            label: 'Mostrar avaliações',
+            description: 'Exibe as estrelas de avaliação (rating) na lista e '
+                'nos detalhes dos jogos.',
+            toggle: () => s.getShowRatings(),
+            onToggle: (v) => s.setShowRatings(v),
+          ),
         ],
       ),
-      _Category(
+      SettingsCategory(
         label: 'Tela',
         description: 'Como o app ocupa a tela do dispositivo.',
         icon: Icons.aspect_ratio,
         options: [
-          _Option(
+          SettingsOption(
             label: 'Tela cheia (imersiva)',
             description: 'Oculta as barras do sistema em dispositivos móveis '
                 'para uma experiência de console.',
@@ -247,7 +295,7 @@ class _SettingsViewState extends State<SettingsView> {
             },
           ),
           if (AppDirs.isAndroid || AppDirs.isIOS)
-            _Option(
+            SettingsOption(
               label: 'Travar paisagem',
               description: 'Mantém a interface sempre na horizontal.',
               toggle: () => s.getLandscapeLock(),
@@ -263,12 +311,12 @@ class _SettingsViewState extends State<SettingsView> {
             ),
         ],
       ),
-      _Category(
+      SettingsCategory(
         label: 'Controles',
         description: 'Comportamento do direcional e da navegação.',
         icon: Icons.sports_esports_outlined,
         options: [
-          _Option(
+          SettingsOption(
             label: 'Repetição da navegação',
             description: 'Tempo entre as repetições ao segurar o direcional. '
                 'Valores menores repetem mais rápido.',
@@ -288,23 +336,37 @@ class _SettingsViewState extends State<SettingsView> {
               _svc.gamepad.setRepeatInterval(Duration(milliseconds: ms));
             },
           ),
+          SettingsOption(
+            label: 'Esquema de botões',
+            description: 'Padrão usa A=confirmar e B=voltar (Xbox/Sony). '
+                '"Nintendo" troca os dois, como no RetroArch.',
+            cycleValues: const [
+              ('standard', 'Padrão (A/B)'),
+              ('nintendo', 'Nintendo (B/A)'),
+            ],
+            currentIndex: () => _cycleIndex(
+              const ['standard', 'nintendo'],
+              s.getButtonScheme(),
+            ),
+            onCycle: (idx) {
+              final scheme = const ['standard', 'nintendo'][idx];
+              s.setButtonScheme(scheme);
+              _svc.gamepad.setButtonScheme(scheme);
+            },
+          ),
         ],
       ),
     ];
   }
-
-  List<_Option> _currentOptions() =>
-      _categories.isEmpty ? const [] : _categories[_category].options;
 
   int _cycleIndex<T>(List<T> values, T current) {
     final i = values.indexOf(current);
     return i < 0 ? 0 : i;
   }
 
-  Color _categoryAccent() {
-    if (_categories.isEmpty) return AppTheme.accent;
+  Color _categoryColor(int index) {
     const keys = ['nes', 'snes', 'gba', 'psx'];
-    return AppTheme.systemColor(keys[_category % keys.length]);
+    return AppTheme.systemColor(keys[index % keys.length]);
   }
 
   void _onGamepad(GamepadAction action) {
@@ -313,114 +375,56 @@ class _SettingsViewState extends State<SettingsView> {
     if (!isCurrent) return;
 
     switch (action) {
-      case GamepadAction.up:
-        _move(-1);
-      case GamepadAction.down:
-        _move(1);
       case GamepadAction.left:
-        _moveCategory(-1);
+        _move(-1);
       case GamepadAction.right:
-        _moveCategory(1);
+        _move(1);
       case GamepadAction.confirm:
-        _activate();
-      case GamepadAction.back:
-        Navigator.of(context).pop();
+        _openSelected();
+      case GamepadAction.up:
+      case GamepadAction.down:
+        break;
       case GamepadAction.start:
       case GamepadAction.home:
         Navigator.of(context).pop();
       case GamepadAction.pageUp:
-        _moveCategory(-1);
+        _move(-1);
       case GamepadAction.pageDown:
-        _moveCategory(1);
+        _move(1);
+      case GamepadAction.back:
+        Navigator.of(context).pop();
       case GamepadAction.select:
         break;
     }
   }
 
-  /// Anda na opcao; ao ultrapassar o fim, muda para a categoria vizinha.
   void _move(int delta) {
-    final options = _currentOptions();
-    if (options.isEmpty) return;
-    var next = _selected + delta;
-    if (next < 0 || next >= options.length) {
-      final dir = next < 0 ? -1 : 1;
-      _moveCategory(dir);
-      return;
-    }
-    _select(next);
-  }
-
-  void _moveCategory(int delta) {
     if (_categories.isEmpty) return;
-    final next = (_category + delta).clamp(0, _categories.length - 1);
-    if (next == _category) return;
-    setState(() {
-      _category = next;
-      _selected = _selected.clamp(0, _currentOptions().length - 1);
-      _rowKeys = List.generate(_currentOptions().length, (_) => GlobalKey());
-    });
-    _scrollToSelected();
+    final next = (_selected + delta).clamp(0, _categories.length - 1);
+    if (next == _selected) return;
+    setState(() => _selected = next);
   }
 
-  void _select(int index) {
-    setState(() => _selected = index);
-    _scrollToSelected();
-  }
-
-  void _scrollToSelected() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_selected >= _rowKeys.length) return;
-      final ctx = _rowKeys[_selected].currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          alignment: 0.5,
-        );
-      }
-    });
-  }
-
-  Future<void> _activate() async {
-    final opt = _selectedOption();
-    if (opt == null) return;
-    if (opt.onConfirm != null) {
-      await opt.onConfirm!();
-      return;
-    }
-    if (opt.count > 0) {
-      final next = (opt.index + 1) % opt.count;
-      opt.onCycle?.call(next);
-      setState(() {});
-      return;
-    }
-    if (opt.onToggle != null) {
-      opt.onToggle!(!opt.toggleValue);
-      setState(() {});
-    }
-  }
-
-  _Option? _selectedOption() {
-    final options = _currentOptions();
-    if (options.isEmpty) return null;
-    return options[_selected.clamp(0, options.length - 1)];
+  void _openSelected() {
+    if (_categories.isEmpty) return;
+    Navigator.of(context).push(
+      consoleRoute(
+        SettingsCategoryView(
+          category: _categories[_selected],
+          accent: _categoryColor(_selected),
+        ),
+      ),
+    );
   }
 
   NavCallbacks get _callbacks => NavCallbacks()
-    ..onUp = () {
+    ..onLeft = () {
       _move(-1);
     }
-    ..onDown = () {
+    ..onRight = () {
       _move(1);
     }
-    ..onLeft = () {
-      _moveCategory(-1);
-    }
-    ..onRight = () {
-      _moveCategory(1);
-    }
-    ..onConfirm = _activate
+    ..onConfirm = _openSelected
     ..onBack = () {
       Navigator.of(context).pop();
     }
@@ -431,10 +435,10 @@ class _SettingsViewState extends State<SettingsView> {
       Navigator.of(context).popUntil((r) => r.isFirst);
     }
     ..onPageUp = () {
-      _moveCategory(-1);
+      _move(-1);
     }
     ..onPageDown = () {
-      _moveCategory(1);
+      _move(1);
     };
 
   @override
@@ -445,9 +449,11 @@ class _SettingsViewState extends State<SettingsView> {
       );
     }
 
-    final isWide =
+    final isLandscape =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
-    final accent = _categoryAccent();
+    final carouselH = isLandscape ? 260.0 : 200.0;
+    final tileW = (carouselH * 0.95).clamp(0.0, 250.0);
+    final accent = _categoryColor(_selected);
 
     return Scaffold(
       body: NavFocus(
@@ -455,13 +461,41 @@ class _SettingsViewState extends State<SettingsView> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            CoverBackdrop(color: accent, darken: isWide ? 0.35 : 0.6),
+            CoverBackdrop(color: accent, darken: isLandscape ? 0.45 : 0.65),
             SafeArea(
               child: Column(
                 children: [
-                  _topBar(onBack: () => Navigator.of(context).pop()),
-                  Expanded(child: _optionsArea(accent, isWide)),
-                  _categoryCarousel(accent),
+                  _topBar(),
+                  Expanded(child: _InfoPanel(category: _categories[_selected])),
+                  SizedBox(
+                    height: carouselH,
+                    child: CoverCarousel(
+                      itemCount: _categories.length,
+                      tileWidth: tileW,
+                      tileHeight: carouselH,
+                      selected: _selected,
+                      onSelect: (i) {
+                        if (i != _selected) _move(i - _selected);
+                      },
+                      itemBuilder: (context, index, selected) {
+                        final cat = _categories[index];
+                        final color = _categoryColor(index);
+                        return _CategoryCover(
+                          label: cat.label,
+                          icon: cat.icon,
+                          color: color,
+                          selected: selected,
+                          onTap: () {
+                            if (selected) {
+                              _openSelected();
+                            } else {
+                              _move(index - _selected);
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
                   _hints(),
                 ],
               ),
@@ -472,14 +506,14 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _topBar({required VoidCallback onBack}) {
+  Widget _topBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
       child: Row(
         children: [
           IconButton(
             tooltip: 'Voltar',
-            onPressed: onBack,
+            onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.arrow_back),
             color: Colors.white70,
           ),
@@ -502,274 +536,68 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _optionsArea(Color accent, bool isWide) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: Row(
-            children: [
-              Icon(_categories[_category].icon,
-                  size: 18, color: AppTheme.accentAlt),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _categories[_category].label.toUpperCase(),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppTheme.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _optionsList(accent)),
-              if (isWide)
-                SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.34,
-                  child: _detailPanel(accent),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _optionsList(Color accent) {
-    final cat = _categories[_category];
-    return ListView.builder(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-      itemCount: cat.options.length,
-      itemBuilder: (context, index) {
-        final opt = cat.options[index];
-        final selected = index == _selected;
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: KeyedSubtree(
-            key: _rowKeys[index],
-            child: InkWell(
-              onTap: () => _select(index),
-              borderRadius: BorderRadius.circular(10),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
-                ),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? accent.withValues(alpha: 0.28)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected
-                        ? accent.withValues(alpha: 0.75)
-                        : Colors.white10,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        opt.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (opt.valueText.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Text(
-                          opt.valueText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: selected ? AppTheme.accentAlt : Colors.white24,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _detailPanel(Color accent) {
-    final cat = _categories[_category];
-    final opt = _selectedOption();
-    if (opt == null) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  accent.withValues(alpha: 0.85),
-                  AppTheme.accentAlt.withValues(alpha: 0.75),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(cat.icon, size: 16, color: Colors.white),
-                const SizedBox(width: 6),
-                Text(
-                  cat.label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            opt.label,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            opt.description,
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-              height: 1.55,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  'Valor atual',
-                  style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
-                ),
-                const Spacer(),
-                Flexible(
-                  child: Text(
-                    opt.valueText,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppTheme.accentAlt,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => _activate(),
-            icon: const Icon(Icons.touch_app),
-            label: const Text('Ativar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _categoryCarousel(Color accent) {
-    return SizedBox(
-      height: 132,
-      child: CoverCarousel(
-        itemCount: _categories.length,
-        tileWidth: 190,
-        tileHeight: 132,
-        selected: _category,
-        onSelect: (i) {
-          if (i != _category) _moveCategory(i - _category);
-        },
-        itemBuilder: (context, index, selected) {
-          final cat = _categories[index];
-          final color = _categoryColor(index);
-          return _CategoryCover(
-            label: cat.label,
-            icon: cat.icon,
-            color: color,
-            selected: selected,
-            onTap: () {
-              if (selected) {
-                setState(() {});
-              } else {
-                _moveCategory(index - _category);
-              }
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Color _categoryColor(int index) {
-    const keys = ['nes', 'snes', 'gba', 'psx'];
-    return AppTheme.systemColor(keys[index % keys.length]);
-  }
-
   Widget _hints() {
     if (!_svc.settings.getShowHints()) return const SizedBox.shrink();
     return const HintBar(
       hints: [
         Hint('◄ ►  categoria'),
-        Hint('▲▼  opção'),
-        Hint('A  ativar'),
+        Hint('A  abrir'),
         Hint('B  voltar'),
       ],
     );
   }
 }
 
-/// Tile de categoria para o carrossel de configuracoes.
+class _InfoPanel extends StatelessWidget {
+  final SettingsCategory category;
+
+  const _InfoPanel({required this.category});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            category.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 40,
+              fontWeight: FontWeight.w800,
+              height: 1.05,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            category.description,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Aperte para abrir as opções desta categoria',
+            style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tile de categoria para o carrossel de configurações.
 class _CategoryCover extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -848,54 +676,6 @@ class _CategoryCover extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Categoria de configuracoes (carrossel inferior).
-class _Category {
-  final String label;
-  final String description;
-  final IconData icon;
-  final List<_Option> options;
-
-  const _Category({
-    required this.label,
-    required this.description,
-    required this.icon,
-    required this.options,
-  });
-}
-
-/// Opcao de uma categoria: pode ter ciclo de valores, liga/desliga,
-/// confirmacao ou tudo isso.
-class _Option {
-  final String label;
-  final String description;
-  final String Function() display;
-  final List<(dynamic, String)>? cycleValues;
-  final int Function()? currentIndex;
-  final void Function(int)? onCycle;
-  final bool Function()? toggle;
-  final void Function(bool)? onToggle;
-  final Future<void> Function()? onConfirm;
-
-  const _Option({
-    required this.label,
-    this.description = '',
-    this.display = _emptyText,
-    this.cycleValues,
-    this.currentIndex,
-    this.onCycle,
-    this.toggle,
-    this.onToggle,
-    this.onConfirm,
-  });
-
-  static String _emptyText() => '';
-
-  int get count => cycleValues?.length ?? 0;
-  int get index => currentIndex?.call() ?? 0;
-  bool get toggleValue => toggle?.call() ?? false;
-  String get valueText => display();
 }
 
 class _TextPromptDialog extends StatefulWidget {

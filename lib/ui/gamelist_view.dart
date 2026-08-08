@@ -99,9 +99,48 @@ class _GamelistViewState extends State<GamelistView> {
               g.displayName.toLowerCase().contains(q))
           .toList();
     }
+    _sort();
     if (_selected >= _filtered.length && _filtered.isNotEmpty) {
       _selected = 0;
     }
+  }
+
+  /// Aplica a ordenacao configurada pelo usuario ('name', 'name_desc', 'year',
+  /// 'genre').
+  void _sort() {
+    int byName(GameEntry a, GameEntry b) =>
+        a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    switch (_svc.settings.getGameSort()) {
+      case 'name_desc':
+        _filtered.sort((a, b) => byName(b, a));
+      case 'year':
+        _filtered.sort((a, b) {
+          final ya = _yearOf(a);
+          final yb = _yearOf(b);
+          if (ya == null && yb == null) return byName(a, b);
+          if (ya == null) return 1;
+          if (yb == null) return -1;
+          final c = yb.compareTo(ya);
+          return c != 0 ? c : byName(a, b);
+        });
+      case 'genre':
+        _filtered.sort((a, b) {
+          final ga = a.metadata?.genre?.toLowerCase() ?? '';
+          final gb = b.metadata?.genre?.toLowerCase() ?? '';
+          if (ga == gb) return byName(a, b);
+          if (ga.isEmpty) return 1;
+          if (gb.isEmpty) return -1;
+          return ga.compareTo(gb);
+        });
+      default:
+        _filtered.sort(byName);
+    }
+  }
+
+  int? _yearOf(GameEntry g) {
+    final date = g.metadata?.releaseDate;
+    if (date == null || date.length < 4) return null;
+    return int.tryParse(date.substring(0, 4));
   }
 
   void _onSearchChanged(String _) {
@@ -419,11 +458,11 @@ class _GamelistViewState extends State<GamelistView> {
               game: game,
               selected: index == _selected,
               onTap: () {
+                _select(index);
                 if (game.isFolder) {
-                  _select(index);
                   _openSelected();
                 } else {
-                  _select(index);
+                  _play(game);
                 }
               },
             ),
@@ -574,6 +613,7 @@ class _DetailPanel extends StatelessWidget {
         : null;
     final genre = meta?.genre;
     final players = meta?.players;
+    final showRatings = AppScope.of(context).settings.getShowRatings();
     final isLandscape =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
 
@@ -621,7 +661,7 @@ class _DetailPanel extends StatelessWidget {
             ),
           ),
         ],
-        if (meta?.rating != null) ...[
+        if (showRatings && meta?.rating != null) ...[
           const SizedBox(height: 6),
           StarRating(rating: meta!.rating!, size: 16),
         ],
@@ -669,13 +709,15 @@ class _DetailPanel extends StatelessWidget {
                 Flexible(child: SingleChildScrollView(child: info)),
               ],
             )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                cover,
-                const SizedBox(width: 14),
-                Expanded(child: info),
-              ],
+          : SingleChildScrollView(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  cover,
+                  const SizedBox(width: 14),
+                  Expanded(child: info),
+                ],
+              ),
             ),
     );
   }

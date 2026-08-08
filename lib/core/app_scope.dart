@@ -56,6 +56,7 @@ class AppServices {
     gamepad.setRepeatInterval(
       Duration(milliseconds: settings.getGamepadRepeatMs()),
     );
+    gamepad.setButtonScheme(settings.getButtonScheme());
 
     return AppServices(
       settings: settings,

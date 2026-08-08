@@ -210,6 +210,7 @@ class _SystemViewState extends State<SystemView> {
                             fullName: system.fullName,
                             color: AppTheme.systemColor(system.name),
                             gameCount: system.gameCount,
+                            showGameCount: _svc.settings.getShowGameCount(),
                             selected: selected,
                             onTap: () {
                               if (selected) {
@@ -301,6 +302,7 @@ class _InfoPanel extends StatelessWidget {
     final def = system.definition;
     final isLandscape =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
+    final showCount = AppScope.of(context).settings.getShowGameCount();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(24, isLandscape ? 8 : 12, 24, 8),
@@ -337,9 +339,10 @@ class _InfoPanel extends StatelessWidget {
                 _MetaText('${def.releaseYear}'),
                 const _Dot(),
               ],
-              _MetaText(
-                '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
-              ),
+              if (showCount)
+                _MetaText(
+                  '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
+                ),
             ],
           ),
           if (!isLandscape) const SizedBox(height: 6),

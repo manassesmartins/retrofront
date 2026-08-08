@@ -9,6 +9,7 @@ class SystemCover extends StatelessWidget {
   final String fullName;
   final Color color;
   final int gameCount;
+  final bool showGameCount;
   final bool selected;
   final VoidCallback onTap;
 
@@ -18,6 +19,7 @@ class SystemCover extends StatelessWidget {
     required this.fullName,
     required this.color,
     required this.gameCount,
+    this.showGameCount = true,
     required this.selected,
     required this.onTap,
   });
@@ -83,24 +85,25 @@ class SystemCover extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.28),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '$gameCount ${gameCount == 1 ? 'jogo' : 'jogos'}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                    if (showGameCount)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.28),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '$gameCount ${gameCount == 1 ? 'jogo' : 'jogos'}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
