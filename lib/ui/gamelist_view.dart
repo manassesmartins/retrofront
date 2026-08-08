@@ -14,6 +14,7 @@ import 'widgets/cover_image.dart';
 import 'widgets/game_list_row.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
+import 'widgets/option_menu_sheet.dart';
 import 'widgets/scrape_progress_dialog.dart';
 import 'widgets/star_rating.dart';
 
@@ -111,6 +112,14 @@ class _GamelistViewState extends State<GamelistView> {
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     if (!isCurrent) return;
 
+    // Durante a busca, as direcoes ficam para o campo de texto; B sai da busca.
+    if (_searching) {
+      if (action == GamepadAction.back || action == GamepadAction.select) {
+        _exitSearch();
+      }
+      return;
+    }
+
     switch (action) {
       case GamepadAction.up:
         _move(-1);
@@ -133,6 +142,14 @@ class _GamelistViewState extends State<GamelistView> {
       case GamepadAction.select:
         break;
     }
+  }
+
+  void _exitSearch() {
+    setState(() {
+      _searching = false;
+      _search.clear();
+      _applyFilter();
+    });
   }
 
   void _move(int delta) {
@@ -212,62 +229,29 @@ class _GamelistViewState extends State<GamelistView> {
   }
 
   void _openMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Opções',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.cloud_download, color: AppTheme.accent),
-                title: const Text('Baixar capas e informações',
-                    style: TextStyle(color: Colors.white)),
-                subtitle: const Text('Scraping em rede para todos os jogos',
-                    style: TextStyle(color: Colors.white54)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _scrapeAll();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.search, color: AppTheme.accentAlt),
-                title: const Text('Buscar',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => _searching = true);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.refresh, color: Colors.white70),
-                title: const Text('Atualizar lista',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _load();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
+    OptionMenuSheet.show(
+      context,
+      OptionMenuSheet(
+        title: 'Opções',
+        options: [
+          MenuOption(
+            label: 'Baixar capas e informações',
+            subtitle: 'Scraping em rede para todos os jogos',
+            icon: Icons.cloud_download,
+            onTap: _scrapeAll,
           ),
-        );
-      },
+          MenuOption(
+            label: 'Buscar',
+            icon: Icons.search,
+            onTap: () => setState(() => _searching = true),
+          ),
+          MenuOption(
+            label: 'Atualizar lista',
+            icon: Icons.refresh,
+            onTap: _load,
+          ),
+        ],
+      ),
     );
   }
 
@@ -342,11 +326,11 @@ class _GamelistViewState extends State<GamelistView> {
                     searchController: _search,
                     onBack: _goBack,
                     onToggleSearch: () {
-                      setState(() {
-                        _searching = !_searching;
-                        if (!_searching) _search.clear();
-                        _applyFilter();
-                      });
+                      if (_searching) {
+                        _exitSearch();
+                      } else {
+                        setState(() => _searching = true);
+                      }
                     },
                     onMenu: _openMenu,
                     onSearchChanged: _onSearchChanged,
@@ -393,19 +377,24 @@ class _GamelistViewState extends State<GamelistView> {
                                     ],
                                   ),
                   ),
-                  const HintBar(
-                    hints: [
-                      Hint('▲▼  navegar'),
-                      Hint('A / toque na capa  jogar'),
-                      Hint('B  voltar'),
-                    ],
-                  ),
+                  _hints(),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _hints() {
+    if (!_svc.settings.getShowHints()) return const SizedBox.shrink();
+    return const HintBar(
+      hints: [
+        Hint('▲▼  navegar'),
+        Hint('A / toque na capa  jogar'),
+        Hint('B  voltar'),
+      ],
     );
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../data/settings/settings_service.dart';
 import '../../models/game.dart';
 import '../../models/game_entry.dart';
 import '../../models/system.dart';
@@ -16,19 +17,28 @@ class ScrapeService {
   final LibretroThumbnailsProvider libretro;
   final GamelistRepository gamelist;
   final RomScanner scanner;
+  final SettingsService settings;
 
   ScrapeService({
     required this.theGamesDb,
     required this.libretro,
     required this.gamelist,
     required this.scanner,
+    required this.settings,
   });
 
-  /// Provedores em ordem de prioridade (metadados primeiro, capas depois).
-  List<ScrapProvider> get providers => [
-        if (theGamesDb.isConfigured) theGamesDb,
-        libretro,
-      ];
+  /// Provedores em ordem de prioridade, respeitando a preferencia do usuario.
+  List<ScrapProvider> get providers {
+    final pref = settings.getScrapeProvider();
+    return switch (pref) {
+      'thegamesdb' => [if (theGamesDb.isConfigured) theGamesDb, libretro],
+      'libretro' => [libretro, if (theGamesDb.isConfigured) theGamesDb],
+      _ => [
+          if (theGamesDb.isConfigured) theGamesDb,
+          libretro,
+        ],
+    };
+  }
 
   /// Enriquecimento de um unico jogo.
   Future<GameMetadata?> scrapGame(SystemDefinition system, String gameName) async {

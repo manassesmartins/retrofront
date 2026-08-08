@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/android_storage.dart';
 import '../core/app_scope.dart';
 import '../gamepad/gamepad_manager.dart';
 import '../models/system.dart';
@@ -68,6 +69,11 @@ class _SystemViewState extends State<SystemView> {
       _hasError = false;
     });
     try {
+      // No Android o acesso a pasta publica de ROMs exige permissao de
+      // armazenamento; solicita antes do primeiro scan.
+      if (AndroidStorage.isNeeded && !await AndroidStorage.hasAccess()) {
+        await AndroidStorage.request();
+      }
       final systems = await _svc.scanner
           .scanSystems(romsOverride: _svc.settings.getRomsPath());
       if (!mounted) return;
@@ -110,6 +116,11 @@ class _SystemViewState extends State<SystemView> {
       case GamepadAction.select:
         break;
     }
+  }
+
+  Future<void> _grantStorage() async {
+    await AndroidStorage.request();
+    await _load();
   }
 
   void _moveCarousel(int dir) {
@@ -192,8 +203,13 @@ class _SystemViewState extends State<SystemView> {
                     'pasta de ROMs (ex.: nes, snes, psx, gba) e coloque os '
                     'jogos dentro.\nDepois toque em Atualizar ou configure a '
                     'pasta em Configurações.',
-                actionLabel: 'Configurar pasta de ROMs',
-                onAction: _openSettings,
+                actionLabel: AndroidStorage.isNeeded
+                    ? 'Conceder acesso aos arquivos'
+                    : 'Configurar pasta de ROMs',
+                actionIcon:
+                    AndroidStorage.isNeeded ? Icons.folder_open : Icons.settings,
+                onAction:
+                    AndroidStorage.isNeeded ? _grantStorage : _openSettings,
               )
             else
               SafeArea(
@@ -212,13 +228,14 @@ class _SystemViewState extends State<SystemView> {
                         onOpen: _openSelected,
                       ),
                     ),
-                    const HintBar(
-                      hints: [
-                        Hint('◄ ►  navegar'),
-                        Hint('toque/A  entrar'),
-                        Hint('Start  opções'),
-                      ],
-                    ),
+                    if (_svc.settings.getShowHints())
+                      const HintBar(
+                        hints: [
+                          Hint('◄ ►  navegar'),
+                          Hint('toque/A  entrar'),
+                          Hint('Start  opções'),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -439,6 +456,7 @@ class _Message extends StatelessWidget {
   final String title;
   final String message;
   final String actionLabel;
+  final IconData actionIcon;
   final VoidCallback onAction;
 
   const _Message({
@@ -446,6 +464,7 @@ class _Message extends StatelessWidget {
     required this.title,
     required this.message,
     required this.actionLabel,
+    this.actionIcon = Icons.settings,
     required this.onAction,
   });
 
@@ -477,7 +496,7 @@ class _Message extends StatelessWidget {
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onAction,
-              icon: const Icon(Icons.settings),
+              icon: Icon(actionIcon),
               label: Text(actionLabel),
             ),
           ],

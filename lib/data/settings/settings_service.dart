@@ -9,6 +9,10 @@ class SettingsService {
   static const _kRetroArchPath = 'retroarch_path';
   static const _kDarkMode = 'dark_mode';
   static const _kGamepadRepeatMs = 'gamepad_repeat_ms';
+  static const _kFullscreen = 'fullscreen';
+  static const _kLandscapeLock = 'landscape_lock';
+  static const _kShowHints = 'show_hints';
+  static const _kScrapeProvider = 'scrape_provider';
 
   static const _allowList = {
     _kRomsPath,
@@ -17,6 +21,10 @@ class SettingsService {
     _kRetroArchPath,
     _kDarkMode,
     _kGamepadRepeatMs,
+    _kFullscreen,
+    _kLandscapeLock,
+    _kShowHints,
+    _kScrapeProvider,
   };
 
   SharedPreferencesWithCache? _prefs;
@@ -72,4 +80,23 @@ class SettingsService {
 
   Future<void> setGamepadRepeatMs(int value) =>
       _p.setInt(_kGamepadRepeatMs, value);
+
+  bool getFullscreen() => _p.getBool(_kFullscreen) ?? true;
+
+  Future<void> setFullscreen(bool value) => _p.setBool(_kFullscreen, value);
+
+  bool getLandscapeLock() => _p.getBool(_kLandscapeLock) ?? true;
+
+  Future<void> setLandscapeLock(bool value) =>
+      _p.setBool(_kLandscapeLock, value);
+
+  bool getShowHints() => _p.getBool(_kShowHints) ?? true;
+
+  Future<void> setShowHints(bool value) => _p.setBool(_kShowHints, value);
+
+  /// Provedor de scraping: 'auto' (todos em ordem), 'thegamesdb' ou 'libretro'.
+  String getScrapeProvider() => _p.getString(_kScrapeProvider) ?? 'auto';
+
+  Future<void> setScrapeProvider(String value) =>
+      _p.setString(_kScrapeProvider, value);
 }

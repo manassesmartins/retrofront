@@ -48,10 +48,14 @@ class AppServices {
       libretro: libretro,
       gamelist: gamelist,
       scanner: scanner,
+      settings: settings,
     );
 
     final launcher = LaunchService(settings: settings);
     final gamepad = GamepadManager()..start();
+    gamepad.setRepeatInterval(
+      Duration(milliseconds: settings.getGamepadRepeatMs()),
+    );
 
     return AppServices(
       settings: settings,

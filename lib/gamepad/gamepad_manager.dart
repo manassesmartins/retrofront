@@ -32,8 +32,19 @@ class GamepadManager {
 
   final Map<String, bool> _pressed = {};
   Timer? _repeatTimer;
+  GamepadAction? _repeatFor;
   GamepadAction? _heldDirection;
   Duration _repeatInterval = const Duration(milliseconds: 300);
+  int _testCounter = 0;
+
+  /// Antecipacao antes do primeiro repeticao (efeito console: um toque = um passo).
+  static const Duration _repeatInitialDelay = Duration(milliseconds: 450);
+  /// Cooldown para suprimir emissoes duplicadas da mesma acao (ex.: botao e
+  /// analogico reportando o mesmo direcional, ou ruido no deadzone).
+  static const Duration _cooldown = Duration(milliseconds: 140);
+
+  final Stopwatch _clock = Stopwatch()..start();
+  final Map<GamepadAction, int> _lastEmitMs = {};
 
   static const double _axisThreshold = 0.5;
 
@@ -69,40 +80,71 @@ class GamepadManager {
   }
 
   void _handleInput(String source, GamepadAction? action, bool pressed) {
+    if (action == null) return;
     if (pressed) {
-      if (action == null) return;
-      if (_pressed[source] ?? false) return;
+      if (_pressed[source] ?? false) return; // so conta na borda de subida
       _pressed[source] = true;
-      _emit(action);
+      if (_isDirectional(action)) {
+        // Botao e analogico podem reportar o mesmo direcional: trata como um.
+        if (_heldDirection == action) return;
+        _heldDirection = action;
+        _emit(action);
+      } else {
+        _emit(action);
+      }
     } else {
       _pressed[source] = false;
     }
     _updateRepeat();
   }
 
-  void _emit(GamepadAction action) {
-    if (!_isDirectional(action)) {
-      _actionsController.add(action);
-      return;
+  void _emit(GamepadAction action, {bool force = false}) {
+    if (!force) {
+      final now = _clock.elapsedMilliseconds;
+      final last = _lastEmitMs[action] ?? -_cooldown.inMilliseconds * 2;
+      if (now - last < _cooldown.inMilliseconds) return;
+      _lastEmitMs[action] = now;
     }
-    _heldDirection = action;
     _actionsController.add(action);
   }
 
   void _updateRepeat() {
     final active = _heldDirection;
-    if (active != null && _pressed.values.any((p) => p)) {
-      _repeatTimer ??= Timer.periodic(_repeatInterval, (_) {
-        final held = _heldDirection;
-        if (held != null && _isDirectional(held)) {
-          _actionsController.add(held);
-        }
-      });
+    final anyPressed = _pressed.values.any((p) => p);
+    if (active != null && anyPressed) {
+      // Reinicia o cronometro se a direcao segurada mudou.
+      if (_repeatTimer == null || _repeatFor != active) {
+        _stopRepeat();
+        _repeatFor = active;
+        _scheduleRepeat(_repeatInitialDelay);
+      }
     } else {
-      _repeatTimer?.cancel();
-      _repeatTimer = null;
+      _stopRepeat();
+      _repeatFor = null;
       _heldDirection = null;
     }
+  }
+
+  /// Hook de teste: simula um toque (press edge) de uma acao direcional.
+  void handleForTest(GamepadAction action) {
+    _handleInput('test:${_testCounter++}', action, true);
+  }
+
+  void _scheduleRepeat(Duration delay) {
+    _repeatTimer = Timer(delay, () {
+      _repeatTimer = null;
+      final held = _heldDirection;
+      if (held != null && _isDirectional(held)) {
+        // Repeticao proposital de um botao segurado: ignora o cooldown.
+        _emit(held, force: true);
+        _scheduleRepeat(_repeatInterval);
+      }
+    });
+  }
+
+  void _stopRepeat() {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
   }
 
   void setRepeatInterval(Duration interval) {
