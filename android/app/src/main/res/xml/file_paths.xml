@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Caminhos compartilhados via FileProvider para abrir ROMs em emuladores. -->
+<paths>
+    <!-- /storage/emulated/0 (onde ficam as pastas de ROMs) -->
+    <external-path name="external_storage" path="."/>
+    <!-- Diretorios internos do aplicativo -->
+    <files-path name="internal_files" path="."/>
+    <cache-path name="cache" path="."/>
+</paths>
