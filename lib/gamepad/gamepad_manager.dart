@@ -31,6 +31,9 @@ class GamepadManager {
   Stream<bool> get connections => _connectionController.stream;
 
   final Map<String, bool> _pressed = {};
+  // Fonte -> direcao que ela mantem pressionada (botao e/ou eixo).
+  final Map<String, GamepadAction> _directional = {};
+  final List<String> _directionalOrder = [];
   Timer? _repeatTimer;
   GamepadAction? _repeatFor;
   GamepadAction? _heldDirection;
@@ -80,22 +83,43 @@ class GamepadManager {
   }
 
   void _handleInput(String source, GamepadAction? action, bool pressed) {
-    if (action == null) return;
+    if (action == null) {
+      // Eixo voltou ao centro: libera a fonte que segurava a direcao.
+      _pressed[source] = false;
+      _directional.remove(source);
+      _directionalOrder.remove(source);
+      _updateRepeat();
+      return;
+    }
     if (pressed) {
       if (_pressed[source] ?? false) return; // so conta na borda de subida
       _pressed[source] = true;
       if (_isDirectional(action)) {
-        // Botao e analogico podem reportar o mesmo direcional: trata como um.
-        if (_heldDirection == action) return;
-        _heldDirection = action;
-        _emit(action);
+        if (!_directional.containsKey(source)) {
+          _directional[source] = action;
+          _directionalOrder.add(source);
+        }
+        final effective = _effectiveDirection();
+        if (_heldDirection != effective) {
+          _heldDirection = effective;
+          _emit(effective!);
+        }
       } else {
         _emit(action);
       }
     } else {
       _pressed[source] = false;
+      _directional.remove(source);
+      _directionalOrder.remove(source);
     }
     _updateRepeat();
+  }
+
+  /// Direcao efetiva: a da fonte acionada mais recentemente (diagonal resolve
+  /// para a ultima direcao pressionada).
+  GamepadAction? _effectiveDirection() {
+    if (_directionalOrder.isEmpty) return null;
+    return _directional[_directionalOrder.last];
   }
 
   void _emit(GamepadAction action, {bool force = false}) {
@@ -109,9 +133,9 @@ class GamepadManager {
   }
 
   void _updateRepeat() {
-    final active = _heldDirection;
-    final anyPressed = _pressed.values.any((p) => p);
-    if (active != null && anyPressed) {
+    final active = _effectiveDirection();
+    if (active != null) {
+      _heldDirection = active;
       // Reinicia o cronometro se a direcao segurada mudou.
       if (_repeatTimer == null || _repeatFor != active) {
         _stopRepeat();
@@ -125,9 +149,20 @@ class GamepadManager {
     }
   }
 
+  final Map<GamepadAction, String> _testSources = {};
+
   /// Hook de teste: simula um toque (press edge) de uma acao direcional.
-  void handleForTest(GamepadAction action) {
-    _handleInput('test:${_testCounter++}', action, true);
+  void handleForTest(GamepadAction action, {bool release = false}) {
+    if (release) {
+      final source = _testSources.remove(action);
+      if (source != null) {
+        // Simula o eixo voltando ao centro: acao nula, fonte liberada.
+        _handleInput(source, null, false);
+      }
+      return;
+    }
+    final source = _testSources[action] ??= 'test:${_testCounter++}';
+    _handleInput(source, action, true);
   }
 
   void _scheduleRepeat(Duration delay) {

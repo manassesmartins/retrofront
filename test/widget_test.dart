@@ -149,6 +149,27 @@ void main() {
       await sub.cancel();
       manager.dispose();
     });
+
+    test('soltar o analogico interrompe a repeticao', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.handleForTest(GamepadAction.left);
+      // Aguarda o delay inicial (450ms) + uma repeticao para comprovar que
+      // a repeticao esta ativa antes de soltar.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      manager.handleForTest(GamepadAction.left, release: true);
+      final beforeRelease = actions.length;
+      expect(beforeRelease, greaterThan(1));
+
+      // Se a fonte nao fosse limpa, repetiria em ~300ms.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(actions.length, beforeRelease);
+
+      await sub.cancel();
+      manager.dispose();
+    });
   });
 }
 
