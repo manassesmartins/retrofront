@@ -76,6 +76,11 @@ class _SystemViewState extends State<SystemView> {
       }
       final systems = await _svc.scanner
           .scanSystems(romsOverride: _svc.settings.getRomsPath());
+      // Verificacao de inicializacao: carrega as configuracoes dos sistemas e
+      // os gamelists (capas/informacoes ja salvas) em segundo plano.
+      if (systems.isNotEmpty) {
+        unawaited(_svc.gamelist.preload(systems.map((s) => s.name).toList()));
+      }
       if (!mounted) return;
       setState(() {
         _systems = systems;

@@ -93,7 +93,11 @@ class _GamelistViewState extends State<GamelistView> {
     if (q.isEmpty) {
       _filtered = List.of(_games);
     } else {
-      _filtered = _games.where((g) => g.name.toLowerCase().contains(q)).toList();
+      _filtered = _games
+          .where((g) =>
+              g.name.toLowerCase().contains(q) ||
+              g.displayName.toLowerCase().contains(q))
+          .toList();
     }
     if (_selected >= _filtered.length && _filtered.isNotEmpty) {
       _selected = 0;
@@ -204,7 +208,7 @@ class _GamelistViewState extends State<GamelistView> {
       SnackBar(
         content: Text(
           result.ok
-              ? 'Iniciando ${game.name}...'
+              ? 'Iniciando ${game.displayName}...'
               : (result.error ?? 'Erro ao iniciar'),
         ),
       ),
@@ -582,7 +586,7 @@ class _DetailPanel extends StatelessWidget {
             path: meta?.coverPath,
             width: isLandscape ? 180 : 120,
             borderRadius: BorderRadius.circular(14),
-            fallbackLabel: entry.name,
+            fallbackLabel: entry.displayName,
           ),
         ),
       ),
@@ -595,7 +599,7 @@ class _DetailPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          entry.name,
+          entry.displayName,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(

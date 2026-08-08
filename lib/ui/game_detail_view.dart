@@ -105,7 +105,7 @@ class _GameDetailViewState extends State<GameDetailView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          result.ok ? 'Iniciando ${widget.game.name}...' : (result.error ?? 'Erro'),
+          result.ok ? 'Iniciando ${widget.game.displayName}...' : (result.error ?? 'Erro'),
         ),
       ),
     );
@@ -154,7 +154,7 @@ class _GameDetailViewState extends State<GameDetailView> {
   @override
   Widget build(BuildContext context) {
     final meta = _metadata;
-    final title = widget.game.name;
+    final title = widget.game.displayName;
     final year = _yearFrom(meta?.releaseDate);
     final isWide = MediaQuery.of(context).size.width > 760;
 

@@ -107,6 +107,7 @@ class ScrapeService {
   /// Mescla dois metadados preenchendo apenas campos vazios.
   GameMetadata mergeMetadata(GameMetadata current, GameMetadata incoming) {
     return GameMetadata(
+      name: current.name ?? incoming.name,
       description: current.description ?? incoming.description,
       genre: current.genre ?? incoming.genre,
       publisher: current.publisher ?? incoming.publisher,

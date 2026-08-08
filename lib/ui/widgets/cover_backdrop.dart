@@ -14,10 +14,15 @@ class CoverBackdrop extends StatelessWidget {
   /// Cor de fallback (geralmente a cor do sistema) para o gradiente.
   final Color color;
 
+  /// Escurece o gradiente de fallback (0 = nada, 1 = preto) para dar
+  /// contraste extra ao conteudo.
+  final double darken;
+
   const CoverBackdrop({
     super.key,
     this.coverPath,
     required this.color,
+    this.darken = 0,
   });
 
   @override
@@ -27,7 +32,11 @@ class CoverBackdrop extends StatelessWidget {
     final hasCover = file != null && file.existsSync();
 
     Widget base = DecoratedBox(
-      decoration: BoxDecoration(gradient: AppTheme.systemGradient(color)),
+      decoration: BoxDecoration(
+        gradient: AppTheme.systemGradient(
+          Color.lerp(color, Colors.black, darken.clamp(0.0, 1.0)) ?? color,
+        ),
+      ),
     );
 
     if (hasCover) {

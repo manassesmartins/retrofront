@@ -1,4 +1,5 @@
 import 'game.dart';
+import 'game_name.dart';
 
 enum GameEntryType { game, folder }
 
@@ -20,6 +21,9 @@ class GameEntry {
   });
 
   bool get isFolder => type == GameEntryType.folder;
+
+  /// Nome de exibicao: titulo do gamelist ou nome limpo do arquivo.
+  String get displayName => GameName.clean(metadata, name);
 
   GameEntry copyWith({GameMetadata? metadata, String? name}) => GameEntry(
         name: name ?? this.name,

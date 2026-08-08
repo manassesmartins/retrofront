@@ -7,6 +7,7 @@ import 'package:retrofront/data/roms/rom_scanner.dart';
 import 'package:retrofront/data/systems/system_definitions_repository.dart';
 import 'package:retrofront/gamepad/gamepad_manager.dart';
 import 'package:retrofront/models/game.dart';
+import 'package:retrofront/models/game_name.dart';
 import 'package:retrofront/models/system.dart';
 
 void main() {
@@ -47,10 +48,12 @@ void main() {
       addTearDown(() => dir.delete(recursive: true));
 
       await Directory('${dir.path}/nes').create();
+      await Directory('${dir.path}/nes/Sub Pasta').create();
       await Directory('${dir.path}/snes').create();
       await File('${dir.path}/nes/Contra.nes').writeAsString('rom');
       await File('${dir.path}/nes/Super Mario.zip').writeAsString('rom');
       await File('${dir.path}/nes/systeminfo.txt').writeAsString('skip');
+      await File('${dir.path}/nes/Sub Pasta/inner.nes').writeAsString('rom');
       await File('${dir.path}/snes/README.md').writeAsString('ignore');
       await File('${dir.path}/ignored-folder/anything.nes').create(recursive: true);
 
@@ -83,6 +86,27 @@ void main() {
       expect(names, contains('Contra.nes'));
       expect(names, contains('Super Mario.zip'));
       expect(names, isNot(contains('systeminfo.txt')));
+      // Subpastas sao ocultadas (estilo EmulationStation).
+      expect(names, isNot(contains('Sub Pasta')));
+      expect(names, isNot(contains('inner.nes')));
+    });
+  });
+
+  group('GameName', () {
+    test('limpa nome de arquivo para exibicao', () {
+      expect(GameName.cleanFileName('Super Mario Bros. (USA).nes'),
+          'Super Mario Bros');
+      expect(GameName.cleanFileName('Sonic_the_Hedgehog_[!].md'),
+          'Sonic the Hedgehog');
+      expect(GameName.cleanFileName('Pokemon - Red (Europe) (Rev 1).gb'),
+          'Pokemon - Red');
+      expect(GameName.cleanFileName('Contra.nes'), 'Contra');
+    });
+
+    test('usa titulo do gamelist quando disponivel', () {
+      const meta = GameMetadata(name: 'Super Mario Bros. 3');
+      expect(GameName.clean(meta, 'SMB3.nes'), 'Super Mario Bros. 3');
+      expect(GameName.clean(null, 'SMB3.nes'), 'SMB3');
     });
   });
 
@@ -149,6 +173,9 @@ class _StubGamelist implements GamelistRepository {
   Future<Map<String, GameMetadata>> loadFor(String system) async => {};
 
   @override
+  Future<void> preload(List<String> systems) async {}
+
+  @override
   Future<void> save(String system, Map<String, GameMetadata> entries) async {}
 
   @override
@@ -157,4 +184,10 @@ class _StubGamelist implements GamelistRepository {
 
   @override
   Future<void> remove(String system, String path) async {}
+
+  @override
+  void invalidate(String system) {}
+
+  @override
+  void invalidateAll() {}
 }

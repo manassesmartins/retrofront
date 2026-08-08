@@ -1,5 +1,6 @@
 /// Metadados de um jogo (preenchidos por scraping ou manualmente).
 class GameMetadata {
+  final String? name;
   final String? description;
   final String? genre;
   final String? publisher;
@@ -12,6 +13,7 @@ class GameMetadata {
   final String? source;
 
   const GameMetadata({
+    this.name,
     this.description,
     this.genre,
     this.publisher,
@@ -32,6 +34,7 @@ class GameMetadata {
       rating != null;
 
   factory GameMetadata.fromJson(Map<String, dynamic> json) => GameMetadata(
+        name: json['name'] as String?,
         description: json['desc'] as String?,
         genre: json['genre'] as String?,
         publisher: json['publisher'] as String?,
@@ -45,6 +48,7 @@ class GameMetadata {
       );
 
   Map<String, dynamic> toJson() => {
+        if (name != null) 'name': name,
         if (description != null) 'desc': description,
         if (genre != null) 'genre': genre,
         if (publisher != null) 'publisher': publisher,
@@ -58,6 +62,7 @@ class GameMetadata {
       };
 
   GameMetadata copyWith({
+    String? name,
     String? description,
     String? genre,
     String? publisher,
@@ -70,6 +75,7 @@ class GameMetadata {
     String? source,
   }) {
     return GameMetadata(
+      name: name ?? this.name,
       description: description ?? this.description,
       genre: genre ?? this.genre,
       publisher: publisher ?? this.publisher,

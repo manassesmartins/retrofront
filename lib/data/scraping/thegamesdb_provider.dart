@@ -66,6 +66,7 @@ class TheGamesDbProvider implements ScrapProvider {
       final developers = _asList(game['developers']);
 
       final metadata = GameMetadata(
+        name: _asString(game['game_title']),
         description: _asString(game['overview']),
         genre: genres.isNotEmpty ? genres.join(', ') : null,
         publisher: publishers.isNotEmpty ? publishers.join(', ') : null,

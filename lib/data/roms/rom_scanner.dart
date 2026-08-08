@@ -67,24 +67,40 @@ class RomScanner {
   Future<(int, bool)> _statSystem(String dir, SystemDefinition def) async {
     var count = 0;
     var hasMedia = false;
-    final stack = <String>[dir];
-    while (stack.isNotEmpty) {
-      final current = stack.removeLast();
-      final files = Directory(current).list(followLinks: false);
-      await for (final e in files) {
-        if (e is Directory) {
-          stack.add(e.path);
-        } else if (_isRomFile(e.path, def)) {
-          count++;
-        } else if (_isMediaFile(e.path)) {
-          hasMedia = true;
-        }
+    // A contagem considera apenas arquivos diretos (as subpastas sao
+    // ocultadas na listagem); midia (capas) pode estar em subpastas.
+    final files = Directory(dir).list(followLinks: false);
+    await for (final e in files) {
+      if (e is Directory) {
+        if (!hasMedia) hasMedia = await _hasMediaRecursive(e.path);
+      } else if (_isRomFile(e.path, def)) {
+        count++;
+      } else if (_isMediaFile(e.path)) {
+        hasMedia = true;
       }
     }
     return (count, hasMedia);
   }
 
-  /// Lista os jogos/pastas de um sistema (ou de uma subpasta dele).
+  Future<bool> _hasMediaRecursive(String dir) async {
+    final stack = <String>[dir];
+    while (stack.isNotEmpty) {
+      final current = stack.removeLast();
+      final entries = Directory(current).list(followLinks: false);
+      await for (final e in entries) {
+        if (e is Directory) {
+          stack.add(e.path);
+        } else if (_isMediaFile(e.path)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Lista os jogos de um sistema (ou de uma subpasta dele).
+  /// Subpastas sao ocultadas, como no EmulationStation; apenas ROMs (e
+  /// arquivos com metadados no gamelist) aparecem na lista.
   Future<List<GameEntry>> listGames(
     SystemEntry system, {
     String? subPath,
@@ -98,6 +114,8 @@ class RomScanner {
     final result = <GameEntry>[];
 
     await for (final entity in dir.list(followLinks: false)) {
+      if (entity is Directory) continue;
+
       final baseName = p.basename(entity.path);
       if (baseName.startsWith('.') || skipFiles.contains(baseName.toLowerCase())) {
         continue;
@@ -105,15 +123,7 @@ class RomScanner {
 
       final rel = p.relative(entity.path, from: system.path);
 
-      if (entity is Directory) {
-        result.add(GameEntry(
-          name: baseName,
-          path: entity.path,
-          system: system.name,
-          type: GameEntryType.folder,
-          metadata: metadata[rel],
-        ));
-      } else if (_isRomFile(entity.path, def) || metadata.containsKey(rel)) {
+      if (_isRomFile(entity.path, def) || metadata.containsKey(rel)) {
         result.add(GameEntry(
           name: baseName,
           path: entity.path,
@@ -124,10 +134,8 @@ class RomScanner {
       }
     }
 
-    result.sort((a, b) {
-      if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    result.sort((a, b) =>
+        a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return result;
   }
 
