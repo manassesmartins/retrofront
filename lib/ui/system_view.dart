@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/android_storage.dart';
@@ -32,6 +33,7 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   int _selected = 0;
   bool _loading = true;
   bool _hasError = false;
+  bool _androidAccess = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
   bool _depsReady = false;
 
@@ -78,8 +80,11 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
       if (AndroidStorage.isNeeded && !await AndroidStorage.hasAccess()) {
         await AndroidStorage.request();
       }
-      final systems = await _svc.scanner
-          .scanSystems(romsOverride: _svc.settings.getRomsPath());
+      _androidAccess =
+          !AndroidStorage.isNeeded || await AndroidStorage.hasAccess();
+      final systems = await _svc.scanner.scanSystems(
+        romsOverride: _svc.settings.getRomsPath(),
+      );
       // Verificacao de inicializacao: carrega as configuracoes dos sistemas e
       // os gamelists (capas/informacoes ja salvas) em segundo plano.
       if (systems.isNotEmpty) {
@@ -132,6 +137,21 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   // Abre a tela do sistema de "All files access" (via request no _load) e o
   // scan re-roda ao voltar do Android (didChangeAppLifecycleState) e aqui.
   Future<void> _grantStorage() async {
+    final granted = await AndroidStorage.request();
+    if (!granted) {
+      // Fallback: alguns OEMs/Android 15 ignoram o intent especifico; abre as
+      // configuracoes do app, onde fica o toggle de "All files access".
+      await AndroidStorage.openSettings();
+    }
+    await _load();
+  }
+
+  Future<void> _pickRomsFolder() async {
+    final path = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Pasta de ROMs',
+    );
+    if (path == null) return;
+    await _svc.settings.setRomsPath(path);
     await _load();
   }
 
@@ -171,7 +191,11 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final isLandscape =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
-    final carouselH = isLandscape ? 300.0 : 220.0;
+    final screenH = MediaQuery.of(context).size.height;
+    final carouselH = (screenH * (isLandscape ? 0.42 : 0.30)).clamp(
+      140.0,
+      isLandscape ? 300.0 : 220.0,
+    );
     final tileW = (carouselH * 0.72).clamp(0.0, 250.0);
 
     return Scaffold(
@@ -201,17 +225,21 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
               _Message(
                 icon: Icons.folder_off_outlined,
                 title: 'Nenhum sistema encontrado',
-                message: 'Crie subpastas com o nome de cada console na sua '
-                    'pasta de ROMs (ex.: nes, snes, psx, gba) e coloque os '
-                    'jogos dentro.\nDepois toque em Atualizar ou configure a '
-                    'pasta em Configurações.',
-                actionLabel: AndroidStorage.isNeeded
+                message:
+                    'Escolha a pasta onde ficam suas ROMs (uma subpasta '
+                    'por console: nes, snes, psx, gba...) e o app monta a '
+                    'biblioteca.\nNo Android é preciso também conceder acesso '
+                    'aos arquivos para ler a pasta.',
+                actionLabel: 'Escolher pasta de ROMs',
+                actionIcon: Icons.folder_open,
+                onAction: _pickRomsFolder,
+                secondaryLabel: AndroidStorage.isNeeded && !_androidAccess
                     ? 'Conceder acesso aos arquivos'
-                    : 'Configurar pasta de ROMs',
-                actionIcon:
-                    AndroidStorage.isNeeded ? Icons.folder_open : Icons.settings,
-                onAction:
-                    AndroidStorage.isNeeded ? _grantStorage : _openSettings,
+                    : null,
+                secondaryIcon: Icons.perm_media,
+                onSecondaryAction: AndroidStorage.isNeeded && !_androidAccess
+                    ? _grantStorage
+                    : null,
               )
             else
               SafeArea(
@@ -250,12 +278,24 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
                     if (_svc.settings.getShowHints())
                       HintBar(
                         hints: [
-                          Hint('navegar',
-                              button: _svc.gamepad.currentButtonFor(GamepadAction.right)),
-                          Hint('entrar',
-                              button: _svc.gamepad.currentButtonFor(GamepadAction.confirm)),
-                          Hint('opções',
-                              button: _svc.gamepad.currentButtonFor(GamepadAction.start)),
+                          Hint(
+                            'navegar',
+                            button: _svc.gamepad.currentButtonFor(
+                              GamepadAction.right,
+                            ),
+                          ),
+                          Hint(
+                            'entrar',
+                            button: _svc.gamepad.currentButtonFor(
+                              GamepadAction.confirm,
+                            ),
+                          ),
+                          Hint(
+                            'opções',
+                            button: _svc.gamepad.currentButtonFor(
+                              GamepadAction.start,
+                            ),
+                          ),
                         ],
                       ),
                   ],
@@ -288,7 +328,11 @@ class _TopBar extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.sports_esports, color: Colors.white, size: 22),
+            child: const Icon(
+              Icons.sports_esports,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           const Text(
@@ -331,55 +375,57 @@ class _InfoPanel extends StatelessWidget {
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
     final showCount = AppScope.of(context).settings.getShowGameCount();
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(24, isLandscape ? 8 : 12, 24, 8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            switchInCurve: Curves.easeOut,
-            child: Text(
-              system.fullName,
-              key: ValueKey(system.name),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: isLandscape ? 52 : 34,
-                fontWeight: FontWeight.w800,
-                height: 1.05,
-                letterSpacing: -0.5,
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(24, isLandscape ? 8 : 12, 24, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOut,
+              child: Text(
+                system.fullName,
+                key: ValueKey(system.name),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: isLandscape ? 52 : 34,
+                  fontWeight: FontWeight.w800,
+                  height: 1.05,
+                  letterSpacing: -0.5,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (def.manufacturer.isNotEmpty) ...[
-                _MetaText(def.manufacturer),
-                const _Dot(),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (def.manufacturer.isNotEmpty) ...[
+                  _MetaText(def.manufacturer),
+                  const _Dot(),
+                ],
+                if (def.releaseYear != null) ...[
+                  _MetaText('${def.releaseYear}'),
+                  const _Dot(),
+                ],
+                if (showCount)
+                  _MetaText(
+                    '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
+                  ),
               ],
-              if (def.releaseYear != null) ...[
-                _MetaText('${def.releaseYear}'),
-                const _Dot(),
-              ],
-              if (showCount)
-                _MetaText(
-                  '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
-                ),
-            ],
-          ),
-          if (!isLandscape) const SizedBox(height: 6),
-          const Text(
-            'Selecione um console e aperte para explorar sua biblioteca.',
-            style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+            ),
+            if (!isLandscape) const SizedBox(height: 6),
+            const Text(
+              'Selecione um console e aperte para explorar sua biblioteca.',
+              style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -422,6 +468,9 @@ class _Message extends StatelessWidget {
   final String actionLabel;
   final IconData actionIcon;
   final VoidCallback onAction;
+  final String? secondaryLabel;
+  final IconData? secondaryIcon;
+  final VoidCallback? onSecondaryAction;
 
   const _Message({
     required this.icon,
@@ -430,12 +479,26 @@ class _Message extends StatelessWidget {
     required this.actionLabel,
     this.actionIcon = Icons.settings,
     required this.onAction,
+    this.secondaryLabel,
+    this.secondaryIcon,
+    this.onSecondaryAction,
   });
 
   @override
   Widget build(BuildContext context) {
+    final secondary = secondaryLabel != null && onSecondaryAction != null
+        ? OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white38),
+            ),
+            onPressed: onSecondaryAction,
+            icon: Icon(secondaryIcon ?? Icons.settings),
+            label: Text(secondaryLabel!),
+          )
+        : null;
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -463,6 +526,7 @@ class _Message extends StatelessWidget {
               icon: Icon(actionIcon),
               label: Text(actionLabel),
             ),
+            if (secondary != null) ...[const SizedBox(height: 10), secondary],
           ],
         ),
       ),

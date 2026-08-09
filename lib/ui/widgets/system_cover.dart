@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 /// Capa de um sistema para o carrossel: caixa 3:4 com a cor do console,
-/// nome e quantidade de jogos. O estado [selected] destaca com brilho.
+/// logo (wordmark do codigo) e quantidade de jogos. O estado [selected]
+/// destaca com brilho.
 class SystemCover extends StatelessWidget {
   final String name;
   final String fullName;
@@ -62,29 +63,36 @@ class SystemCover extends StatelessWidget {
             child: ClipRRect(
               borderRadius: radius,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Spacer(),
-                    Icon(
-                      Icons.sports_esports,
-                      color: Colors.white.withValues(alpha: 0.85),
-                      size: 26,
+                    Text(
+                      name.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: (26 + name.length * -2.2).clamp(18.0, 34.0),
+                        height: 1.0,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2.2,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       fullName,
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 15,
+                        fontSize: 14,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     if (showGameCount)
                       Container(
                         padding: const EdgeInsets.symmetric(

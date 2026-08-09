@@ -46,4 +46,12 @@ class AndroidStorage {
     await Permission.storage.request();
     return hasAccess();
   }
+
+  /// Abre as configuracoes do app no sistema (onde fica o toggle de
+  /// "All files access"). Usado como fallback quando o intent especifico do
+  /// MANAGE_EXTERNAL_STORAGE nao abre em alguns OEMs/Android 15.
+  static Future<bool> openSettings() async {
+    if (!isNeeded) return true;
+    return openAppSettings();
+  }
 }

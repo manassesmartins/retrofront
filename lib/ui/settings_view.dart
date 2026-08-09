@@ -35,7 +35,8 @@ class SettingsView extends StatefulWidget {
   State<SettingsView> createState() => _SettingsViewState();
 }
 
-class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver {
+class _SettingsViewState extends State<SettingsView>
+    with WidgetsBindingObserver {
   AppServices get _svc => AppScope.of(context);
 
   List<SettingsCategory> _categories = [];
@@ -80,7 +81,9 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
   Future<void> _load() async {
     final defaultRoms = (await AppDirs.romsRoot()).path;
     var androidAccess = true;
-    if (AndroidStorage.isNeeded) androidAccess = await AndroidStorage.hasAccess();
+    if (AndroidStorage.isNeeded) {
+      androidAccess = await AndroidStorage.hasAccess();
+    }
     final retroArch = await _svc.launcher.findRetroArch();
     if (!mounted) return;
     setState(() {
@@ -97,13 +100,15 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
     return [
       SettingsCategory(
         label: 'Biblioteca',
-        description: 'Onde ficam os jogos, a ordenação da lista e como o app '
+        description:
+            'Onde ficam os jogos, a ordenação da lista e como o app '
             'acessa o armazenamento.',
         icon: Icons.video_library_outlined,
         options: [
           SettingsOption(
             label: 'Pasta de ROMs',
-            description: 'Pasta principal da biblioteca. Crie uma subpasta por '
+            description:
+                'Pasta principal da biblioteca. Crie uma subpasta por '
                 'console (nes, snes, gba, psx...). Se vazio, usa a pasta '
                 'padrão da plataforma.',
             display: () {
@@ -120,7 +125,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           if (AndroidStorage.isNeeded)
             SettingsOption(
               label: 'Acesso aos arquivos (Android)',
-              description: 'Permite ler a pasta pública /storage/emulated/0/'
+              description:
+                  'Permite ler a pasta pública /storage/emulated/0/'
                   'ROMs. No Android 11+ você precisa ativar "Permitir acesso a '
                   'todos os arquivos" na tela do sistema.',
               display: () => _androidAccess ? 'concedido' : 'pendente',
@@ -138,10 +144,12 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
               ('year', 'Ano'),
               ('genre', 'Gênero'),
             ],
-            currentIndex: () => _cycleIndex(
-              const ['name', 'name_desc', 'year', 'genre'],
-              s.getGameSort(),
-            ),
+            currentIndex: () => _cycleIndex(const [
+              'name',
+              'name_desc',
+              'year',
+              'genre',
+            ], s.getGameSort()),
             onCycle: (idx) => s.setGameSort(
               const ['name', 'name_desc', 'year', 'genre'][idx],
             ),
@@ -161,7 +169,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
         options: [
           SettingsOption(
             label: 'Provedor de scraping',
-            description: 'De onde o app baixa capas e informações. '
+            description:
+                'De onde o app baixa capas e informações. '
                 '"Automático" usa os provedores em ordem até encontrar os '
                 'dados; as demais forçam um provedor (com fallback de capas).',
             cycleValues: const [
@@ -172,17 +181,14 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
               ('mobygames', 'MobyGames'),
               ('libretro', 'Libretro (só capas)'),
             ],
-            currentIndex: () => _cycleIndex(
-              const [
-                'auto',
-                'thegamesdb',
-                'screenscraper',
-                'arcadedb',
-                'mobygames',
-                'libretro',
-              ],
-              s.getScrapeProvider(),
-            ),
+            currentIndex: () => _cycleIndex(const [
+              'auto',
+              'thegamesdb',
+              'screenscraper',
+              'arcadedb',
+              'mobygames',
+              'libretro',
+            ], s.getScrapeProvider()),
             onCycle: (idx) => s.setScrapeProvider(
               const [
                 'auto',
@@ -196,7 +202,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Sistemas para capas',
-            description: 'Quais sistemas baixam capas durante o scraping. '
+            description:
+                'Quais sistemas baixam capas durante o scraping. '
                 'Nenhum marcado = todos.',
             display: () {
               final list = s
@@ -209,15 +216,16 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
               return '${list.length} sistema${list.length == 1 ? '' : 's'}';
             },
             onConfirm: (ctx) async {
-              await Navigator.of(ctx).push(
-                consoleRoute(const CoverSystemsView()),
-              );
+              await Navigator.of(
+                ctx,
+              ).push(consoleRoute(const CoverSystemsView()));
               if (mounted) setState(() {});
             },
           ),
           SettingsOption(
             label: 'Chave TheGamesDB (opcional)',
-            description: 'Sem chave: apenas capas via libretro-thumbnails. '
+            description:
+                'Sem chave: apenas capas via libretro-thumbnails. '
                 'Com chave: descrição, gênero, ano e avaliação também.',
             display: () {
               final key = s.getTheGamesDbKey();
@@ -241,7 +249,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Usuário ScreenScraper (opcional)',
-            description: 'Conta pública do ScreenScraper.fr, usada para '
+            description:
+                'Conta pública do ScreenScraper.fr, usada para '
                 'identificar o app e aumentar o limite de requisições.',
             display: () {
               final user = s.getScreenScraperUser();
@@ -262,7 +271,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Chave ArcadeDB (opcional)',
-            description: 'API de jogos de arcade (MAME/FBA). Sem chave, este '
+            description:
+                'API de jogos de arcade (MAME/FBA). Sem chave, este '
                 'provedor é ignorado.',
             display: () {
               final key = s.getArcadeDbKey();
@@ -286,7 +296,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Chave MobyGames (opcional)',
-            description: 'API de metadados MobyGames. Sem chave, este '
+            description:
+                'API de metadados MobyGames. Sem chave, este '
                 'provedor é ignorado.',
             display: () {
               final key = s.getMobyGamesKey();
@@ -312,13 +323,15 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
       ),
       SettingsCategory(
         label: 'Emulador',
-        description: 'Detecção do RetroArch instalado e opções de inicialização.',
+        description:
+            'Detecção do RetroArch instalado e opções de inicialização.',
         icon: Icons.memory,
         options: [
           if (AppDirs.isAndroid || AppDirs.isIOS)
             SettingsOption(
               label: 'RetroArch detectado',
-              description: 'O app procura o RetroArch instalado em qualquer '
+              description:
+                  'O app procura o RetroArch instalado em qualquer '
                   'versão do Android/iOS automaticamente. Use A para '
                   'verificar novamente.',
               display: () => _retroArch ?? 'não instalado',
@@ -330,7 +343,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           else
             SettingsOption(
               label: 'Caminho do RetroArch',
-              description: 'Executável do RetroArch usado para iniciar os '
+              description:
+                  'Executável do RetroArch usado para iniciar os '
                   'jogos. Se vazio, é procurado automaticamente no PATH, '
                   'em pastas comuns de instalação e no Flatpak/snap.',
               display: () {
@@ -352,13 +366,12 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
             ),
           SettingsOption(
             label: 'Argumentos extras do RetroArch',
-            description: 'Parâmetros adicionais passados ao RetroArch antes do '
+            description:
+                'Parâmetros adicionais passados ao RetroArch antes do '
                 'jogo (ex.: --fullscreen). Se vazio, nenhum é adicionado.',
             display: () {
               final args = s.getRetroArchArgs();
-              return (args == null || args.isEmpty)
-                  ? 'nenhum'
-                  : args;
+              return (args == null || args.isEmpty) ? 'nenhum' : args;
             },
             onConfirm: (ctx) async {
               final value = await showVirtualKeyboardDialog(
@@ -375,16 +388,15 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Mapear botões',
-            description: 'Redefina os botões do controle para ações do frontend. '
+            description:
+                'Redefina os botões do controle para ações do frontend. '
                 'Pressione para atribuir.',
             display: () {
               final hasMap = s.getButtonMap().trim().isNotEmpty;
               return hasMap ? 'Personalizado' : 'Padrão';
             },
             onConfirm: (ctx) async {
-              Navigator.of(ctx).push(
-                consoleRoute(const ButtonMapView()),
-              );
+              Navigator.of(ctx).push(consoleRoute(const ButtonMapView()));
             },
           ),
         ],
@@ -396,7 +408,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
         options: [
           SettingsOption(
             label: 'Tema escuro',
-            description: 'Usa o tema escuro "console". Desligue para o tema '
+            description:
+                'Usa o tema escuro "console". Desligue para o tema '
                 'claro.',
             toggle: () => s.getDarkMode(),
             onToggle: (v) {
@@ -406,13 +419,15 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Mostrar dicas',
-            description: 'Exibe a barra de atalhos (dicas) no rodapé das telas.',
+            description:
+                'Exibe a barra de atalhos (dicas) no rodapé das telas.',
             toggle: () => s.getShowHints(),
             onToggle: (v) => s.setShowHints(v),
           ),
           SettingsOption(
             label: 'Mostrar avaliações',
-            description: 'Exibe as estrelas de avaliação (rating) na lista e '
+            description:
+                'Exibe as estrelas de avaliação (rating) na lista e '
                 'nos detalhes dos jogos.',
             toggle: () => s.getShowRatings(),
             onToggle: (v) => s.setShowRatings(v),
@@ -426,28 +441,28 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
         options: [
           SettingsOption(
             label: 'Idioma da interface',
-            description: 'Idioma usado pelo teclado virtual e pela interface. '
+            description:
+                'Idioma usado pelo teclado virtual e pela interface. '
                 'Define também o layout de letras (acentos) do teclado.',
-            cycleValues: [
-              for (final l in appLanguages) (l.id, l.label),
-            ],
-            currentIndex: () => _cycleIndex(
-              [for (final l in appLanguages) l.id],
-              s.getLanguage(),
-            ),
+            cycleValues: [for (final l in appLanguages) (l.id, l.label)],
+            currentIndex: () => _cycleIndex([
+              for (final l in appLanguages) l.id,
+            ], s.getLanguage()),
             onCycle: (idx) => s.setLanguage(appLanguages[idx].id),
           ),
         ],
       ),
       SettingsCategory(
         label: 'RetroAchievements',
-        description: 'Login e integração com o serviço de conquistas '
+        description:
+            'Login e integração com o serviço de conquistas '
             'RetroAchievements (via RetroArch).',
         icon: Icons.emoji_events_outlined,
         options: [
           SettingsOption(
             label: 'Habilitar conquistas',
-            description: 'Quando ligado, o app passa suas credenciais ao '
+            description:
+                'Quando ligado, o app passa suas credenciais ao '
                 'RetroArch ao iniciar cada jogo (--appendconfig).',
             toggle: () => s.getRaEnabled(),
             onToggle: (v) => s.setRaEnabled(v),
@@ -474,13 +489,12 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Senha',
-            description: 'Senha da sua conta. Fica salva apenas no dispositivo '
+            description:
+                'Senha da sua conta. Fica salva apenas no dispositivo '
                 'e é passada ao RetroArch.',
             display: () {
               final pass = s.getRaPassword();
-              return pass.isEmpty
-                  ? 'não configurada'
-                  : '••••••••';
+              return pass.isEmpty ? 'não configurada' : '••••••••';
             },
             onConfirm: (ctx) async {
               final value = await showVirtualKeyboardDialog(
@@ -505,7 +519,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
         options: [
           SettingsOption(
             label: 'Tela cheia (imersiva)',
-            description: 'Oculta as barras do sistema em dispositivos móveis '
+            description:
+                'Oculta as barras do sistema em dispositivos móveis '
                 'para uma experiência de console.',
             toggle: () => s.getFullscreen(),
             onToggle: (v) {
@@ -537,7 +552,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
         options: [
           SettingsOption(
             label: 'Repetição da navegação',
-            description: 'Tempo entre as repetições ao segurar o direcional. '
+            description:
+                'Tempo entre as repetições ao segurar o direcional. '
                 'Valores menores repetem mais rápido.',
             cycleValues: const [
               (150, '150 ms'),
@@ -545,10 +561,8 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
               (450, '450 ms'),
               (600, '600 ms'),
             ],
-            currentIndex: () => _cycleIndex(
-              const [150, 300, 450, 600],
-              s.getGamepadRepeatMs(),
-            ),
+            currentIndex: () =>
+                _cycleIndex(const [150, 300, 450, 600], s.getGamepadRepeatMs()),
             onCycle: (idx) {
               final ms = const [150, 300, 450, 600][idx];
               s.setGamepadRepeatMs(ms);
@@ -557,16 +571,17 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
           ),
           SettingsOption(
             label: 'Esquema de botões',
-            description: 'Padrão usa A=confirmar e B=voltar (Xbox/Sony). '
+            description:
+                'Padrão usa A=confirmar e B=voltar (Xbox/Sony). '
                 '"Nintendo" troca os dois, como no RetroArch.',
             cycleValues: const [
               ('standard', 'Padrão (A/B)'),
               ('nintendo', 'Nintendo (B/A)'),
             ],
-            currentIndex: () => _cycleIndex(
-              const ['standard', 'nintendo'],
-              s.getButtonScheme(),
-            ),
+            currentIndex: () => _cycleIndex(const [
+              'standard',
+              'nintendo',
+            ], s.getButtonScheme()),
             onCycle: (idx) {
               final scheme = const ['standard', 'nintendo'][idx];
               s.setButtonScheme(scheme);
@@ -670,7 +685,11 @@ class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver
 
     final isLandscape =
         MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
-    final carouselH = isLandscape ? 260.0 : 200.0;
+    final screenH = MediaQuery.of(context).size.height;
+    final carouselH = (screenH * (isLandscape ? 0.40 : 0.30)).clamp(
+      140.0,
+      isLandscape ? 260.0 : 200.0,
+    );
     final tileW = (carouselH * 0.95).clamp(0.0, 250.0);
     final accent = _categoryColor(_selected);
 
@@ -775,43 +794,45 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            category.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 40,
-              fontWeight: FontWeight.w800,
-              height: 1.05,
-              letterSpacing: -0.5,
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              category.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 40,
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+                letterSpacing: -0.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            category.description,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-              height: 1.5,
+            const SizedBox(height: 14),
+            Text(
+              category.description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Aperte para abrir as opções desta categoria',
-            style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
-          ),
-        ],
+            const SizedBox(height: 18),
+            const Text(
+              'Aperte para abrir as opções desta categoria',
+              style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -874,7 +895,11 @@ class _CategoryCover extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(icon, color: Colors.white.withValues(alpha: 0.85), size: 24),
+                    Icon(
+                      icon,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      size: 46,
+                    ),
                     const Spacer(),
                     Text(
                       label,
@@ -897,4 +922,3 @@ class _CategoryCover extends StatelessWidget {
     );
   }
 }
-
