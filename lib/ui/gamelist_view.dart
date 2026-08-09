@@ -7,6 +7,7 @@ import '../gamepad/gamepad_manager.dart';
 import '../models/game_entry.dart';
 import '../models/system.dart';
 import 'game_detail_view.dart';
+import 'system_options_view.dart';
 import 'theme.dart';
 import 'widgets/console_route.dart';
 import 'widgets/cover_backdrop.dart';
@@ -17,6 +18,7 @@ import 'widgets/nav_key_handler.dart';
 import 'widgets/option_menu_sheet.dart';
 import 'widgets/scrape_progress_dialog.dart';
 import 'widgets/star_rating.dart';
+import 'widgets/virtual_keyboard.dart';
 
 /// Lista de jogos de um sistema estilo console: menu a esquerda com o jogo
 /// selecionado em destaque (capa grande + metadados) a direita/abaixo.
@@ -143,22 +145,18 @@ class _GamelistViewState extends State<GamelistView> {
     return int.tryParse(date.substring(0, 4));
   }
 
-  void _onSearchChanged(String _) {
-    setState(() {
-      _applyFilter();
-      _scrollToSelected();
-    });
-  }
-
   void _onGamepad(GamepadAction action) {
     if (!mounted) return;
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     if (!isCurrent) return;
 
-    // Durante a busca, as direcoes ficam para o campo de texto; B sai da busca.
+    // Durante a busca, as direcoes ficam para o teclado virtual; select/start
+    // encerram a busca e B (backspace) apaga caracteres no teclado.
     if (_searching) {
-      if (action == GamepadAction.back || action == GamepadAction.select) {
-        _exitSearch();
+      if (action == GamepadAction.select ||
+          action == GamepadAction.home ||
+          action == GamepadAction.start) {
+        _doneSearch();
       }
       return;
     }
@@ -193,6 +191,12 @@ class _GamelistViewState extends State<GamelistView> {
       _search.clear();
       _applyFilter();
     });
+  }
+
+  /// Sai da busca mantendo o filtro digitado.
+  void _doneSearch() {
+    setState(() => _searching = false);
+    _scrollToSelected();
   }
 
   void _move(int delta) {
@@ -293,6 +297,18 @@ class _GamelistViewState extends State<GamelistView> {
             icon: Icons.refresh,
             onTap: _load,
           ),
+          MenuOption(
+            label: 'Opções do sistema',
+            subtitle: 'Core e argumentos extras deste console',
+            icon: Icons.tune,
+            onTap: () {
+              Navigator.of(context).push(
+                consoleRoute(
+                  SystemOptionsView(system: widget.system.definition),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -376,8 +392,20 @@ class _GamelistViewState extends State<GamelistView> {
                       }
                     },
                     onMenu: _openMenu,
-                    onSearchChanged: _onSearchChanged,
                   ),
+                  if (_searching)
+                    VirtualKeyboard(
+                      controller: _search,
+                      language: _svc.settings.getLanguage(),
+                      onChanged: (_) {
+                        setState(() {
+                          _applyFilter();
+                          _scrollToSelected();
+                        });
+                      },
+                      onDone: _doneSearch,
+                      onCancel: _doneSearch,
+                    ),
                   Expanded(
                     child: _loading
                         ? const Center(
@@ -480,7 +508,6 @@ class _Header extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onToggleSearch;
   final VoidCallback onMenu;
-  final ValueChanged<String> onSearchChanged;
 
   const _Header({
     required this.title,
@@ -489,7 +516,6 @@ class _Header extends StatelessWidget {
     required this.onBack,
     required this.onToggleSearch,
     required this.onMenu,
-    required this.onSearchChanged,
   });
 
   @override
@@ -538,16 +564,36 @@ class _Header extends StatelessWidget {
         ),
         if (searching)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              controller: searchController,
-              autofocus: true,
-              onChanged: onSearchChanged,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Buscar jogo...',
-                hintStyle: TextStyle(color: Colors.white38),
-                prefixIcon: Icon(Icons.search, color: Colors.white38),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+            child: Container(
+              height: 46,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceHigh,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, color: Colors.white38, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      searchController.text.isEmpty
+                          ? 'Digite para buscar...'
+                          : searchController.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: searchController.text.isEmpty
+                            ? Colors.white38
+                            : Colors.white,
+                        fontSize: 16,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

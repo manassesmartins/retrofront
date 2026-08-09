@@ -2,16 +2,24 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gamepads/gamepads.dart' show GamepadButton;
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
+import 'package:retrofront/core/app_languages.dart';
 import 'package:retrofront/data/gamelist/gamelist_repository.dart';
+import 'package:retrofront/data/launch/launch_service.dart';
 import 'package:retrofront/data/roms/rom_scanner.dart';
+import 'package:retrofront/data/settings/settings_service.dart';
 import 'package:retrofront/data/systems/system_definitions_repository.dart';
 import 'package:retrofront/gamepad/gamepad_manager.dart';
 import 'package:retrofront/models/game.dart';
 import 'package:retrofront/models/game_name.dart';
 import 'package:retrofront/models/system.dart';
+import 'package:retrofront/models/system_override.dart';
+import 'package:retrofront/ui/widgets/virtual_keyboard.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('SystemDefinition', () {
     test('parse de extensoes e match', () {
       final def = SystemDefinition.fromJson(const {
@@ -111,6 +119,48 @@ void main() {
     });
   });
 
+  group('VirtualKeyboard', () {
+    test('layout pt-BR tem linha de acentos no topo', () {
+      final layout = VkLayout.ofLanguage('pt-BR');
+      final rows = vkRows(layout, symbols: false, shift: false);
+      expect(rows.first.map((k) => k.char).join(), contains('á'));
+      expect(rows.first.map((k) => k.char).join(), contains('ç'));
+      // Ultima linha: acoes (shift, backspace, sym, espaço, ok).
+      final last = rows.last;
+      expect(last.every((k) => k.isAction), isTrue);
+    });
+
+    test('shift transforma letras em maiusculas', () {
+      final layout = VkLayout.ofLanguage('en-US');
+      final lower = vkRows(layout, symbols: false, shift: false);
+      final upper = vkRows(layout, symbols: false, shift: true);
+      expect(
+        lower.firstWhere((r) => !r.every((k) => k.isAction)).first.char,
+        'q',
+      );
+      expect(
+        upper.firstWhere((r) => !r.every((k) => k.isAction)).first.char,
+        'Q',
+      );
+    });
+
+    test('pagina de simbolos traz digitos e pontuacao', () {
+      final layout = VkLayout.ofLanguage('en-US');
+      final rows = vkRows(layout, symbols: true, shift: false);
+      final digits = rows.first.map((k) => k.char).join();
+      expect(digits, '1234567890');
+      final all = rows.map((r) => r.map((k) => k.char ?? '').join()).join();
+      expect(all, contains('.'));
+      expect(all, contains('_'));
+    });
+
+    test('idioma desconhecido usa fallback English', () {
+      expect(VkLayout.ofLanguage('xx-XX').id, 'en-US');
+      expect(appLanguageById('es-ES').label, 'Español');
+      expect(appLanguageById('zz-ZZ').id, 'pt-BR');
+    });
+  });
+
   group('GamepadManager', () {
     test('acoes direcionais sao repetiveis e confirmar nao', () {
       final manager = GamepadManager();
@@ -199,6 +249,154 @@ void main() {
 
       await sub.cancel();
       manager.dispose();
+    });
+  });
+
+  group('GamepadManager button overrides', () {
+    test('override muda a acao de um botao', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.setButtonOverrides({GamepadButton.a: GamepadAction.back});
+      manager.handleButtonForTest(GamepadButton.a);
+      manager.handleButtonForTest(GamepadButton.a, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, [GamepadAction.back]);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('serializeButtonMap/deserializeButtonMap round trip', () {
+      final manager = GamepadManager();
+      manager.setButtonOverrides({
+        GamepadButton.a: GamepadAction.confirm,
+        GamepadButton.back: GamepadAction.start,
+      });
+      final raw = manager.serializeButtonMap();
+      expect(raw, 'a=confirm;back=start');
+
+      final restored = GamepadManager.deserializeButtonMap(raw);
+      expect(restored, {
+        GamepadButton.a: GamepadAction.confirm,
+        GamepadButton.back: GamepadAction.start,
+      });
+
+      manager.dispose();
+    });
+
+    test('deserializeButtonMap ignora itens invalidos', () {
+      final restored =
+          GamepadManager.deserializeButtonMap('a=confirm;bogus=x;x=y');
+      expect(restored, {GamepadButton.a: GamepadAction.confirm});
+    });
+
+    test('clearButtonOverrides retorna ao padrao', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.setButtonOverrides({GamepadButton.a: GamepadAction.back});
+      manager.clearButtonOverrides();
+      manager.handleButtonForTest(GamepadButton.a);
+      manager.handleButtonForTest(GamepadButton.a, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, [GamepadAction.confirm]);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+  });
+
+  group('SystemOverride', () {
+    test('serializa e desserializa JSON', () {
+      const ov = SystemOverride(core: 'mesen', extraArgs: '--verbose');
+      final restored = SystemOverride.fromJson(ov.toJson());
+      expect(restored.core, 'mesen');
+      expect(restored.extraArgs, '--verbose');
+      expect(restored.isSet, isTrue);
+    });
+
+    test('vazio nao e considerado configurado', () {
+      const empty = SystemOverride();
+      expect(empty.isSet, isFalse);
+    });
+  });
+
+  group('SettingsService', () {
+    test('persiste override por sistema e credenciais RetroAchievements',
+        () async {
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      final settings = SettingsService();
+      await settings.init();
+
+      await settings.setSystemOverride(
+        'nes',
+        const SystemOverride(core: 'mesen', extraArgs: '--fullscreen'),
+      );
+      expect(settings.getSystemOverride('nes')?.core, 'mesen');
+      expect(settings.getSystemOverride('nes')?.extraArgs, '--fullscreen');
+
+      await settings.setSystemOverride('snes', const SystemOverride(core: 'snes9x'));
+      expect(settings.getSystemOverrides().length, 2);
+
+      await settings.setSystemOverride('nes', null);
+      expect(settings.getSystemOverride('nes'), isNull);
+      expect(settings.getSystemOverrides().length, 1);
+
+      await settings.setRaEnabled(true);
+      await settings.setRaUsername('player1');
+      await settings.setRaPassword('segredo');
+      expect(settings.getRaEnabled(), isTrue);
+      expect(settings.getRaUsername(), 'player1');
+      expect(settings.getRaPassword(), 'segredo');
+    });
+  });
+
+  group('LaunchService.buildLaunchCommand', () {
+    const base =
+        '%EMULATOR_RETROARCH% -L %CORE_RETROARCH%/nes_libretro.so %ROM%';
+
+    test('aplica core por sistema, args globais e por sistema e config RA',
+        () {
+      final cmd = LaunchService.buildLaunchCommand(
+        resolvedCommand: base,
+        gamePath: '/roms/nes/Game.nes',
+        override: const SystemOverride(core: 'mesen', extraArgs: '--fullscreen'),
+        globalArgs: '--verbose',
+        raAppendConfig: '/cfg/cheevos.cfg',
+      );
+      expect(cmd, contains('mesen_libretro.so'));
+      expect(cmd, isNot(contains('nes_libretro.so')));
+      expect(cmd, contains('--fullscreen'));
+      expect(cmd, contains('--verbose'));
+      expect(cmd, contains('--appendconfig "/cfg/cheevos.cfg"'));
+      expect(cmd, endsWith('"/roms/nes/Game.nes"'));
+    });
+
+    test('sem override mantem o comando original', () {
+      final cmd = LaunchService.buildLaunchCommand(
+        resolvedCommand: base,
+        gamePath: '/roms/nes/Game.nes',
+      );
+      expect(cmd, contains('nes_libretro.so'));
+      expect(cmd, endsWith('"/roms/nes/Game.nes"'));
+    });
+
+    test('replaceCore com caminho completo usa como esta', () {
+      expect(
+        LaunchService.replaceCore(
+          'ra -L /cores/x.so %ROM%',
+          '/cores/y_libretro.so',
+        ),
+        'ra -L /cores/y_libretro.so %ROM%',
+      );
+    });
+
+    test('replaceCore sem -L injeta antes da ROM', () {
+      expect(LaunchService.replaceCore('ra %ROM%', 'mesen'),
+          'ra -L mesen_libretro.so %ROM%');
     });
   });
 }

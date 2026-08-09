@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../models/system_override.dart';
 
 /// Preferencias do aplicativo com cache em memoria (SharedPreferencesWithCache),
 /// permitindo leituras sincronas durante o scraping e lançamento de jogos.
@@ -18,6 +22,16 @@ class SettingsService {
   static const _kShowGameCount = 'show_game_count';
   static const _kShowRatings = 'show_ratings';
   static const _kButtonScheme = 'button_scheme';
+  static const _kLanguage = 'language';
+  static const _kButtonMap = 'button_map';
+  static const _kScreenScraperUser = 'screenscraper_user';
+  static const _kArcadeDbKey = 'arcadedb_key';
+  static const _kMobyGamesKey = 'mobygames_key';
+  static const _kCoverSystems = 'cover_systems';
+  static const _kRaEnabled = 'ra_enabled';
+  static const _kRaUsername = 'ra_username';
+  static const _kRaPassword = 'ra_password';
+  static const _kSystemOverrides = 'system_overrides';
 
   static const _allowList = {
     _kRomsPath,
@@ -35,6 +49,16 @@ class SettingsService {
     _kShowGameCount,
     _kShowRatings,
     _kButtonScheme,
+    _kLanguage,
+    _kButtonMap,
+    _kScreenScraperUser,
+    _kArcadeDbKey,
+    _kMobyGamesKey,
+    _kCoverSystems,
+    _kRaEnabled,
+    _kRaUsername,
+    _kRaPassword,
+    _kSystemOverrides,
   };
 
   SharedPreferencesWithCache? _prefs;
@@ -135,4 +159,94 @@ class SettingsService {
 
   Future<void> setButtonScheme(String value) =>
       _p.setString(_kButtonScheme, value);
+
+/// Idioma do sistema: 'pt-BR', 'en-US', 'es-ES', 'fr-FR', 'de-DE' ou
+  /// 'it-IT'. Usado pelo teclado virtual (e futuras traduções da interface).
+  String getLanguage() => _p.getString(_kLanguage) ?? 'pt-BR';
+
+  Future<void> setLanguage(String value) => _p.setString(_kLanguage, value);
+
+  /// Mapeamento de botões em formato serializado ("a=confirm;b=back;...").
+  String getButtonMap() => _p.getString(_kButtonMap) ?? '';
+
+  Future<void> setButtonMap(String value) => _p.setString(_kButtonMap, value);
+
+  /// Usuário ScreenScraper (para API pública).
+  String getScreenScraperUser() => _p.getString(_kScreenScraperUser) ?? '';
+
+  Future<void> setScreenScraperUser(String value) =>
+      _p.setString(_kScreenScraperUser, value.trim());
+
+  /// Chave API ArcadeDB.
+  String getArcadeDbKey() => _p.getString(_kArcadeDbKey) ?? '';
+
+  Future<void> setArcadeDbKey(String value) =>
+      _p.setString(_kArcadeDbKey, value.trim());
+
+  /// Chave API MobyGames.
+  String getMobyGamesKey() => _p.getString(_kMobyGamesKey) ?? '';
+
+  Future<void> setMobyGamesKey(String value) =>
+      _p.setString(_kMobyGamesKey, value.trim());
+
+  /// Sistemas para os quais baixar capas (lista de nomes, separados por vírgula).
+  String getCoverSystems() => _p.getString(_kCoverSystems) ?? '';
+
+  Future<void> setCoverSystems(String value) =>
+      _p.setString(_kCoverSystems, value.trim());
+
+  /// RetroAchievements habilitado (injeta credenciais no RetroArch ao jogar).
+  bool getRaEnabled() => _p.getBool(_kRaEnabled) ?? false;
+
+  Future<void> setRaEnabled(bool value) => _p.setBool(_kRaEnabled, value);
+
+  /// Usuário RetroAchievements.
+  String getRaUsername() => _p.getString(_kRaUsername) ?? '';
+
+  Future<void> setRaUsername(String value) =>
+      _p.setString(_kRaUsername, value.trim());
+
+  /// Senha RetroAchievements (salva localmente para o RetroArch).
+  String getRaPassword() => _p.getString(_kRaPassword) ?? '';
+
+  Future<void> setRaPassword(String value) =>
+      _p.setString(_kRaPassword, value);
+
+  /// Sobrescritas por sistema (core/args), persistidas em um único JSON.
+  Map<String, SystemOverride> getSystemOverrides() {
+    final raw = _p.getString(_kSystemOverrides);
+    if (raw == null || raw.trim().isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final result = <String, SystemOverride>{};
+      for (final e in decoded.entries) {
+        result[e.key] =
+            SystemOverride.fromJson(e.value as Map<String, dynamic>);
+      }
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  SystemOverride? getSystemOverride(String systemName) =>
+      getSystemOverrides()[systemName];
+
+  Future<void> setSystemOverride(
+      String systemName, SystemOverride? override) async {
+    final map = getSystemOverrides();
+    if (override == null || !override.isSet) {
+      map.remove(systemName);
+    } else {
+      map[systemName] = override;
+    }
+    if (map.isEmpty) {
+      await _p.remove(_kSystemOverrides);
+    } else {
+      final json = jsonEncode({
+        for (final e in map.entries) e.key: e.value.toJson(),
+      });
+      await _p.setString(_kSystemOverrides, json);
+    }
+  }
 }

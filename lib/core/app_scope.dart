@@ -3,8 +3,11 @@ import 'package:flutter/widgets.dart';
 import '../data/gamelist/gamelist_repository.dart';
 import '../data/launch/launch_service.dart';
 import '../data/roms/rom_scanner.dart';
+import '../data/scraping/arcadedb_provider.dart';
 import '../data/scraping/libretro_thumbnails_provider.dart';
+import '../data/scraping/mobygames_provider.dart';
 import '../data/scraping/scrape_service.dart';
+import '../data/scraping/screenscraper_provider.dart';
 import '../data/scraping/thegamesdb_provider.dart';
 import '../data/settings/settings_service.dart';
 import '../data/systems/system_definitions_repository.dart';
@@ -43,9 +46,21 @@ class AppServices {
     final theGamesDb =
         TheGamesDbProvider(apiKey: () => settings.getTheGamesDbKey() ?? '');
     final libretro = LibretroThumbnailsProvider();
+    final screenScraper = ScreenScraperDbProvider(
+      username: () => settings.getScreenScraperUser(),
+    );
+    final arcadeDb = ArcadeDbProvider(
+      apikey: () => settings.getArcadeDbKey(),
+    );
+    final mobyGames = MobyGamesProvider(
+      apiKey: () => settings.getMobyGamesKey(),
+    );
     final scrape = ScrapeService(
       theGamesDb: theGamesDb,
       libretro: libretro,
+      screenScraper: screenScraper,
+      arcadeDb: arcadeDb,
+      mobyGames: mobyGames,
       gamelist: gamelist,
       scanner: scanner,
       settings: settings,
@@ -57,6 +72,9 @@ class AppServices {
       Duration(milliseconds: settings.getGamepadRepeatMs()),
     );
     gamepad.setButtonScheme(settings.getButtonScheme());
+    gamepad.setButtonOverrides(
+      GamepadManager.deserializeButtonMap(settings.getButtonMap()),
+    );
 
     return AppServices(
       settings: settings,

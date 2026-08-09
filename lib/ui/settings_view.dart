@@ -6,17 +6,21 @@ import 'package:flutter/services.dart';
 
 import '../core/android_storage.dart';
 import '../core/app_dirs.dart';
+import '../core/app_languages.dart';
 import '../core/app_scope.dart';
 import '../core/screen_mode.dart';
 import '../gamepad/gamepad_manager.dart';
 import 'settings_category_view.dart';
 import 'settings_options.dart';
+import 'cover_systems_view.dart';
 import 'theme.dart';
 import 'widgets/console_route.dart';
 import 'widgets/cover_backdrop.dart';
 import 'widgets/cover_carousel.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
+import 'widgets/virtual_keyboard.dart';
+import 'button_map_view.dart';
 
 /// Tela de Configurações estilo console: carrossel horizontal de categorias.
 /// Cada categoria abre como uma janela própria (SettingsCategoryView), em vez
@@ -140,20 +144,58 @@ class _SettingsViewState extends State<SettingsView> {
           SettingsOption(
             label: 'Provedor de scraping',
             description: 'De onde o app baixa capas e informações. '
-                '"Automático" usa TheGamesDB (com chave) e '
-                'libretro-thumbnails; as demais forçam um provedor.',
+                '"Automático" usa os provedores em ordem até encontrar os '
+                'dados; as demais forçam um provedor (com fallback de capas).',
             cycleValues: const [
               ('auto', 'Automático'),
               ('thegamesdb', 'TheGamesDB'),
+              ('screenscraper', 'ScreenScraper'),
+              ('arcadedb', 'ArcadeDB'),
+              ('mobygames', 'MobyGames'),
               ('libretro', 'Libretro (só capas)'),
             ],
             currentIndex: () => _cycleIndex(
-              const ['auto', 'thegamesdb', 'libretro'],
+              const [
+                'auto',
+                'thegamesdb',
+                'screenscraper',
+                'arcadedb',
+                'mobygames',
+                'libretro',
+              ],
               s.getScrapeProvider(),
             ),
             onCycle: (idx) => s.setScrapeProvider(
-              const ['auto', 'thegamesdb', 'libretro'][idx],
+              const [
+                'auto',
+                'thegamesdb',
+                'screenscraper',
+                'arcadedb',
+                'mobygames',
+                'libretro',
+              ][idx],
             ),
+          ),
+          SettingsOption(
+            label: 'Sistemas para capas',
+            description: 'Quais sistemas baixam capas durante o scraping. '
+                'Nenhum marcado = todos.',
+            display: () {
+              final list = s
+                  .getCoverSystems()
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+              if (list.isEmpty) return 'todos';
+              return '${list.length} sistema${list.length == 1 ? '' : 's'}';
+            },
+            onConfirm: (ctx) async {
+              await Navigator.of(ctx).push(
+                consoleRoute(const CoverSystemsView()),
+              );
+              if (mounted) setState(() {});
+            },
           ),
           SettingsOption(
             label: 'Chave TheGamesDB (opcional)',
@@ -166,18 +208,86 @@ class _SettingsViewState extends State<SettingsView> {
                   : '••••${key.substring(key.length > 4 ? key.length - 4 : key.length)}';
             },
             onConfirm: (ctx) async {
-              final controller =
-                  TextEditingController(text: s.getTheGamesDbKey() ?? '');
-              final value = await showDialog<String>(
-                context: ctx,
-                builder: (dialogCtx) => _TextPromptDialog(
-                  title: 'Chave TheGamesDB',
-                  controller: controller,
-                  obscure: true,
-                  onSave: () => s.setTheGamesDbKey(controller.text),
-                ),
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Chave TheGamesDB',
+                initial: s.getTheGamesDbKey() ?? '',
+                obscure: true,
+                language: s.getLanguage(),
               );
-              if (value != null && mounted) setState(() {});
+              if (value != null) {
+                await s.setTheGamesDbKey(value);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+          SettingsOption(
+            label: 'Usuário ScreenScraper (opcional)',
+            description: 'Conta pública do ScreenScraper.fr, usada para '
+                'identificar o app e aumentar o limite de requisições.',
+            display: () {
+              final user = s.getScreenScraperUser();
+              return user.isEmpty ? 'não configurado' : user;
+            },
+            onConfirm: (ctx) async {
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Usuário ScreenScraper',
+                initial: s.getScreenScraperUser(),
+                language: s.getLanguage(),
+              );
+              if (value != null) {
+                await s.setScreenScraperUser(value);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+          SettingsOption(
+            label: 'Chave ArcadeDB (opcional)',
+            description: 'API de jogos de arcade (MAME/FBA). Sem chave, este '
+                'provedor é ignorado.',
+            display: () {
+              final key = s.getArcadeDbKey();
+              return key.isEmpty
+                  ? 'não configurada'
+                  : '••••${key.substring(key.length > 4 ? key.length - 4 : key.length)}';
+            },
+            onConfirm: (ctx) async {
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Chave ArcadeDB',
+                initial: s.getArcadeDbKey(),
+                obscure: true,
+                language: s.getLanguage(),
+              );
+              if (value != null) {
+                await s.setArcadeDbKey(value);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+          SettingsOption(
+            label: 'Chave MobyGames (opcional)',
+            description: 'API de metadados MobyGames. Sem chave, este '
+                'provedor é ignorado.',
+            display: () {
+              final key = s.getMobyGamesKey();
+              return key.isEmpty
+                  ? 'não configurada'
+                  : '••••${key.substring(key.length > 4 ? key.length - 4 : key.length)}';
+            },
+            onConfirm: (ctx) async {
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Chave MobyGames',
+                initial: s.getMobyGamesKey(),
+                obscure: true,
+                language: s.getLanguage(),
+              );
+              if (value != null) {
+                await s.setMobyGamesKey(value);
+                if (mounted) setState(() {});
+              }
             },
           ),
         ],
@@ -233,18 +343,30 @@ class _SettingsViewState extends State<SettingsView> {
                   : args;
             },
             onConfirm: (ctx) async {
-              final controller =
-                  TextEditingController(text: s.getRetroArchArgs() ?? '');
-              final value = await showDialog<String>(
-                context: ctx,
-                builder: (dialogCtx) => _TextPromptDialog(
-                  title: 'Argumentos extras',
-                  controller: controller,
-                  obscure: false,
-                  onSave: () => s.setRetroArchArgs(controller.text),
-                ),
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Argumentos extras',
+                initial: s.getRetroArchArgs() ?? '',
+                language: s.getLanguage(),
               );
-              if (value != null && mounted) setState(() {});
+              if (value != null) {
+                await s.setRetroArchArgs(value);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+          SettingsOption(
+            label: 'Mapear botões',
+            description: 'Redefina os botões do controle para ações do frontend. '
+                'Pressione para atribuir.',
+            display: () {
+              final hasMap = s.getButtonMap().trim().isNotEmpty;
+              return hasMap ? 'Personalizado' : 'Padrão';
+            },
+            onConfirm: (ctx) async {
+              Navigator.of(ctx).push(
+                consoleRoute(const ButtonMapView()),
+              );
             },
           ),
         ],
@@ -276,6 +398,85 @@ class _SettingsViewState extends State<SettingsView> {
                 'nos detalhes dos jogos.',
             toggle: () => s.getShowRatings(),
             onToggle: (v) => s.setShowRatings(v),
+          ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'Sistema',
+        description: 'Idioma e preferências globais do aplicativo.',
+        icon: Icons.language,
+        options: [
+          SettingsOption(
+            label: 'Idioma da interface',
+            description: 'Idioma usado pelo teclado virtual e pela interface. '
+                'Define também o layout de letras (acentos) do teclado.',
+            cycleValues: [
+              for (final l in appLanguages) (l.id, l.label),
+            ],
+            currentIndex: () => _cycleIndex(
+              [for (final l in appLanguages) l.id],
+              s.getLanguage(),
+            ),
+            onCycle: (idx) => s.setLanguage(appLanguages[idx].id),
+          ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'RetroAchievements',
+        description: 'Login e integração com o serviço de conquistas '
+            'RetroAchievements (via RetroArch).',
+        icon: Icons.emoji_events_outlined,
+        options: [
+          SettingsOption(
+            label: 'Habilitar conquistas',
+            description: 'Quando ligado, o app passa suas credenciais ao '
+                'RetroArch ao iniciar cada jogo (--appendconfig).',
+            toggle: () => s.getRaEnabled(),
+            onToggle: (v) => s.setRaEnabled(v),
+          ),
+          SettingsOption(
+            label: 'Usuário',
+            description: 'Seu nome de usuário em retroachievements.org.',
+            display: () {
+              final user = s.getRaUsername();
+              return user.isEmpty ? 'não configurado' : user;
+            },
+            onConfirm: (ctx) async {
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Usuário RetroAchievements',
+                initial: s.getRaUsername(),
+                language: s.getLanguage(),
+              );
+              if (value != null) {
+                await s.setRaUsername(value);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+          SettingsOption(
+            label: 'Senha',
+            description: 'Senha da sua conta. Fica salva apenas no dispositivo '
+                'e é passada ao RetroArch.',
+            display: () {
+              final pass = s.getRaPassword();
+              return pass.isEmpty
+                  ? 'não configurada'
+                  : '••••••••';
+            },
+            onConfirm: (ctx) async {
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Senha RetroAchievements',
+                initial: s.getRaPassword(),
+                obscure: true,
+                language: s.getLanguage(),
+              );
+              if (value != null) {
+                await s.setRaPassword(value);
+                if (mounted) setState(() {});
+              }
+            },
           ),
         ],
       ),
@@ -678,67 +879,3 @@ class _CategoryCover extends StatelessWidget {
   }
 }
 
-class _TextPromptDialog extends StatefulWidget {
-  final String title;
-  final TextEditingController controller;
-  final bool obscure;
-  final Future<void> Function() onSave;
-
-  const _TextPromptDialog({
-    required this.title,
-    required this.controller,
-    required this.obscure,
-    required this.onSave,
-  });
-
-  @override
-  State<_TextPromptDialog> createState() => _TextPromptDialogState();
-}
-
-class _TextPromptDialogState extends State<_TextPromptDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.controller.text);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppTheme.surface,
-      title: Text(widget.title),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        obscureText: widget.obscure,
-        style: const TextStyle(color: Colors.white),
-        decoration: const InputDecoration(
-          labelText: 'Valor',
-          labelStyle: TextStyle(color: Colors.white54),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            widget.controller.text = _controller.text;
-            await widget.onSave();
-            if (context.mounted) Navigator.pop(context, 'ok');
-          },
-          child: const Text('Salvar'),
-        ),
-      ],
-    );
-  }
-}

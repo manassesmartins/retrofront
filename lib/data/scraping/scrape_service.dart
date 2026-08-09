@@ -6,8 +6,11 @@ import '../../models/game_entry.dart';
 import '../../models/system.dart';
 import '../gamelist/gamelist_repository.dart';
 import '../roms/rom_scanner.dart';
+import 'arcadedb_provider.dart';
 import 'libretro_thumbnails_provider.dart';
+import 'mobygames_provider.dart';
 import 'scrap_provider.dart';
+import 'screenscraper_provider.dart';
 import 'thegamesdb_provider.dart';
 
 /// Orquestra os provedores de scraping para enriquecer os jogos com
@@ -15,6 +18,9 @@ import 'thegamesdb_provider.dart';
 class ScrapeService {
   final TheGamesDbProvider theGamesDb;
   final LibretroThumbnailsProvider libretro;
+  final ScreenScraperDbProvider? screenScraper;
+  final ArcadeDbProvider? arcadeDb;
+  final MobyGamesProvider? mobyGames;
   final GamelistRepository gamelist;
   final RomScanner scanner;
   final SettingsService settings;
@@ -22,6 +28,9 @@ class ScrapeService {
   ScrapeService({
     required this.theGamesDb,
     required this.libretro,
+    this.screenScraper,
+    this.arcadeDb,
+    this.mobyGames,
     required this.gamelist,
     required this.scanner,
     required this.settings,
@@ -30,14 +39,29 @@ class ScrapeService {
   /// Provedores em ordem de prioridade, respeitando a preferencia do usuario.
   List<ScrapProvider> get providers {
     final pref = settings.getScrapeProvider();
-    return switch (pref) {
-      'thegamesdb' => [if (theGamesDb.isConfigured) theGamesDb, libretro],
-      'libretro' => [libretro, if (theGamesDb.isConfigured) theGamesDb],
-      _ => [
-          if (theGamesDb.isConfigured) theGamesDb,
-          libretro,
-        ],
+    final fallbacks = <ScrapProvider>[
+      if (theGamesDb.isConfigured) theGamesDb,
+      if (screenScraper?.isConfigured ?? false) screenScraper!,
+      if (arcadeDb?.isConfigured ?? false) arcadeDb!,
+      if (mobyGames?.isConfigured ?? false) mobyGames!,
+      libretro,
+    ];
+    final forced = switch (pref) {
+      'thegamesdb' => theGamesDb.isConfigured ? theGamesDb : null,
+      'libretro' => libretro,
+      'screenscraper' => screenScraper?.isConfigured ?? false
+          ? screenScraper!
+          : null,
+      'arcadedb' => arcadeDb?.isConfigured ?? false ? arcadeDb! : null,
+      'mobygames' => mobyGames?.isConfigured ?? false ? mobyGames! : null,
+      _ => null,
     };
+    if (forced == null) return fallbacks;
+    return [
+      forced,
+      for (final p in fallbacks)
+        if (!identical(p, forced)) p,
+    ];
   }
 
   /// Enriquecimento de um unico jogo.
@@ -52,7 +76,7 @@ class ScrapeService {
           ? result.metadata
           : mergeMetadata(merged, result.metadata!);
     }
-    return merged;
+    return _applyCoverPolicy(system, merged);
   }
 
   /// Scraping em lote para todos os jogos de um sistema, salvando no gamelist.
@@ -94,6 +118,22 @@ class ScrapeService {
     }
 
     return (total: targets.length, success: success, failed: errors.length);
+  }
+
+  /// Respeita a selecao de sistemas para capas: se o usuario restringiu os
+  /// sistemas, remove a capa baixada dos sistemas fora da lista (mantem
+  /// metadados). Lista vazia = baixar capas para todos.
+  GameMetadata? _applyCoverPolicy(SystemDefinition system, GameMetadata? meta) {
+    if (meta == null || meta.coverPath == null) return meta;
+    final allowed = settings.getCoverSystems();
+    if (allowed.trim().isEmpty) return meta;
+    final list = allowed
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    if (list.contains(system.name.toLowerCase())) return meta;
+    return meta.copyWith(coverPath: null);
   }
 
   String _relativePath(SystemEntry system, String path) {

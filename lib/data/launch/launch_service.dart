@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../core/app_dirs.dart';
 import '../../models/game_entry.dart';
 import '../../models/system.dart';
+import '../../models/system_override.dart';
 import '../settings/settings_service.dart';
 
 class LaunchResult {
@@ -48,14 +49,22 @@ class LaunchService {
       );
     }
 
-    // Argumentos extras configurados pelo usuario (inseridos antes da ROM).
-    var cmd = command;
-    final extra = settings.getRetroArchArgs();
-    if (extra != null && extra.trim().isNotEmpty) {
-      cmd = cmd.replaceAll('%ROM%', '$extra %ROM%');
+    final override = settings.getSystemOverride(system.name);
+
+    // RetroAchievements: injeta as credenciais via --appendconfig do RetroArch.
+    String? raConfig;
+    if (settings.getRaEnabled() && settings.getRaUsername().trim().isNotEmpty) {
+      raConfig = await _writeRaConfig();
     }
 
-    final tokens = _tokenize(cmd.replaceAll('%ROM%', _quote(game.path)));
+    final cmd = buildLaunchCommand(
+      resolvedCommand: command,
+      gamePath: game.path,
+      override: override,
+      globalArgs: settings.getRetroArchArgs(),
+      raAppendConfig: raConfig,
+    );
+    final tokens = _tokenize(cmd);
     if (tokens.isEmpty) {
       return const LaunchResult.failure('Comando vazio.');
     }
@@ -67,6 +76,75 @@ class LaunchService {
       return LaunchResult.failure('Falha ao iniciar emulador: $e');
     }
   }
+
+  /// Monta o comando final de lançamento (testável): aplica o core por sistema,
+  /// insere os argumentos extras (globais + por sistema) e o config do
+  /// RetroAchievements antes da ROM, e substitui %ROM% pelo caminho do jogo.
+  static String buildLaunchCommand({
+    required String resolvedCommand,
+    required String gamePath,
+    SystemOverride? override,
+    String? globalArgs,
+    String? raAppendConfig,
+  }) {
+    var cmd = resolvedCommand;
+
+    if (override?.hasCore ?? false) {
+      cmd = replaceCore(cmd, override!.core.trim());
+    }
+
+    final extra = <String>[
+      if (globalArgs?.trim().isNotEmpty ?? false) globalArgs!.trim(),
+      if (override?.hasArgs ?? false) override!.extraArgs.trim(),
+      if (raAppendConfig != null) '--appendconfig ${_quote(raAppendConfig)}',
+    ];
+    if (extra.isNotEmpty) {
+      cmd = cmd.replaceAll('%ROM%', '${extra.join(' ')} %ROM%');
+    }
+    return cmd.replaceAll('%ROM%', _quote(gamePath));
+  }
+
+  /// Troca o core do RetroArch no comando (apos `-L`) pelo core escolhido.
+  /// Aceita nome curto ("mesen") ou caminho/arquivo completo.
+  static String replaceCore(String cmd, String core) {
+    final coreToken = core.contains('/') ||
+            core.contains(r'\') ||
+            core.contains('.')
+        ? core
+        : '${core}_libretro.so';
+    final replaced = cmd.replaceAllMapped(
+        RegExp(r'(-L\s+)\S+', caseSensitive: false), (m) => '${m[1]}$coreToken');
+    if (replaced == cmd) {
+      return cmd.replaceFirst('%ROM%', '-L $coreToken %ROM%');
+    }
+    return replaced;
+  }
+
+  /// Escreve um config temporario do RetroArch com as credenciais do
+  /// RetroAchievements e devolve o caminho (null em caso de erro).
+  Future<String?> _writeRaConfig() async {
+    try {
+      final dir = Directory(
+        p.join((await AppDirs.appDataDir()).path, 'retroachievements'),
+      );
+      await dir.create(recursive: true);
+      final file = File(p.join(dir.path, 'cheevos.cfg'));
+      final username = settings.getRaUsername().trim();
+      final password = settings.getRaPassword();
+      final content = [
+        'cheevos_enable = "true"',
+        'cheevos_username = "${_escapeCfg(username)}"',
+        if (password.isNotEmpty) 'cheevos_password = "${_escapeCfg(password)}"',
+      ].join('\n');
+      await file.writeAsString(content);
+      return file.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _escapeCfg(String s) =>
+      s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
   Future<LaunchResult> _launchAndroid(SystemDefinition system, GameEntry game) async {
     const channel = MethodChannel('retrofront/launcher');
@@ -235,7 +313,7 @@ class LaunchService {
     return null;
   }
 
-  String _quote(String s) => '"${s.replaceAll('"', '\\"')}"';
+  static String _quote(String s) => '"${s.replaceAll('"', '\\"')}"';
 
   /// Tokenizacao simples de linha de comando respeitando aspas.
   List<String> _tokenize(String cmd) {

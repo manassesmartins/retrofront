@@ -26,9 +26,15 @@ class GamepadManager {
       StreamController<GamepadAction>.broadcast();
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
+  final StreamController<GamepadButton> _rawButtonsController =
+      StreamController<GamepadButton>.broadcast();
 
   Stream<GamepadAction> get actions => _actionsController.stream;
   Stream<bool> get connections => _connectionController.stream;
+
+  /// Eventos de botao fisico sem tradução (para remapeamento). Disparado na
+  /// borda de subida de cada botao.
+  Stream<GamepadButton> get rawButtons => _rawButtonsController.stream;
 
   final Map<String, bool> _pressed = {};
   // Fonte -> direcao que ela mantem pressionada (botao e/ou eixo).
@@ -51,7 +57,12 @@ class GamepadManager {
 
   static const double _axisThreshold = 0.5;
 
+  bool _connected = false;
+
   bool get isAnyDirectional => _heldDirection != null;
+
+  /// Ha algum gamepad conectado (detectado na inicializacao ou por eventos).
+  bool get isConnected => _connected;
 
   /// Inicia a escuta de gamepads.
   void start() {
@@ -63,16 +74,26 @@ class GamepadManager {
     try {
       final pads = await Gamepads.list();
       if (pads.isNotEmpty) {
+        _connected = true;
         _connectionController.add(true);
       }
     } catch (_) {}
   }
 
   void _onEvent(NormalizedGamepadEvent event) {
+    if (!_connected) _connected = true;
     _connectionController.add(true);
 
     final button = event.button;
     if (button != null) {
+      if (event.value > 0.5) {
+        if (!(_buttonDown[button] ?? false)) {
+          _buttonDown[button] = true;
+          _rawButtonsController.add(button);
+        }
+      } else {
+        _buttonDown[button] = false;
+      }
       _handleInput('button:$button', _actionForButton(button), event.value > 0.5);
       return;
     }
@@ -81,6 +102,8 @@ class GamepadManager {
       _handleInput('axis:$axis', _actionForAxis(axis, event.value), event.value != 0);
     }
   }
+
+  final Map<GamepadButton, bool> _buttonDown = {};
 
   void _handleInput(String source, GamepadAction? action, bool pressed) {
     if (action == null) {
@@ -199,6 +222,75 @@ class GamepadManager {
     _nintendoLayout = scheme == 'nintendo';
   }
 
+  /// Botao padrao (esquema 'standard') de uma acao, para exibicao no remap.
+  static GamepadButton? defaultButtonFor(GamepadAction action) {
+    return switch (action) {
+      GamepadAction.confirm => GamepadButton.a,
+      GamepadAction.back => GamepadButton.b,
+      GamepadAction.start => GamepadButton.start,
+      GamepadAction.select => GamepadButton.back,
+      GamepadAction.home => GamepadButton.home,
+      GamepadAction.pageUp => GamepadButton.leftBumper,
+      GamepadAction.pageDown => GamepadButton.rightBumper,
+      GamepadAction.up => GamepadButton.dpadUp,
+      GamepadAction.down => GamepadButton.dpadDown,
+      GamepadAction.left => GamepadButton.dpadLeft,
+      GamepadAction.right => GamepadButton.dpadRight,
+    };
+  }
+
+  /// Rótulos amigaveis dos botoes para a tela de mapeamento.
+  static String buttonLabel(GamepadButton b) {
+    return switch (b) {
+      GamepadButton.a => 'A',
+      GamepadButton.b => 'B',
+      GamepadButton.x => 'X',
+      GamepadButton.y => 'Y',
+      GamepadButton.dpadUp => 'D-Pad ↑',
+      GamepadButton.dpadDown => 'D-Pad ↓',
+      GamepadButton.dpadLeft => 'D-Pad ←',
+      GamepadButton.dpadRight => 'D-Pad →',
+      GamepadButton.start => 'Start',
+      GamepadButton.back => 'Select',
+      GamepadButton.home => 'Home',
+      GamepadButton.leftBumper => 'LB',
+      GamepadButton.rightBumper => 'RB',
+      GamepadButton.leftTrigger => 'LT',
+      GamepadButton.rightTrigger => 'RT',
+      GamepadButton.leftStick => 'L3',
+      GamepadButton.rightStick => 'R3',
+      GamepadButton.touchpad => 'Touchpad',
+    };
+  }
+
+  /// Rótulos amigaveis das acoes para a tela de mapeamento.
+  static String actionLabel(GamepadAction a) {
+    return switch (a) {
+      GamepadAction.confirm => 'Confirmar',
+      GamepadAction.back => 'Voltar',
+      GamepadAction.start => 'Start (menu)',
+      GamepadAction.select => 'Select (ajuda)',
+      GamepadAction.home => 'Home',
+      GamepadAction.pageUp => 'Página anterior',
+      GamepadAction.pageDown => 'Próxima página',
+      GamepadAction.up => 'Cima',
+      GamepadAction.down => 'Baixo',
+      GamepadAction.left => 'Esquerda',
+      GamepadAction.right => 'Direita',
+    };
+  }
+
+  /// Acoes remapeaveis (botoes de acao; o direcional nao e remapeado).
+  static const List<GamepadAction> remappableActions = [
+    GamepadAction.confirm,
+    GamepadAction.back,
+    GamepadAction.start,
+    GamepadAction.select,
+    GamepadAction.home,
+    GamepadAction.pageUp,
+    GamepadAction.pageDown,
+  ];
+
   bool _isDirectional(GamepadAction a) =>
       a == GamepadAction.up ||
       a == GamepadAction.down ||
@@ -206,6 +298,9 @@ class GamepadManager {
       a == GamepadAction.right;
 
   GamepadAction? _actionForButton(GamepadButton b) {
+    if (_buttonOverrides.containsKey(b)) {
+      return _buttonOverrides[b]!;
+    }
     switch (b) {
       case GamepadButton.a:
         return _nintendoLayout ? GamepadAction.back : GamepadAction.confirm;
@@ -238,6 +333,54 @@ class GamepadManager {
     }
   }
 
+  final Map<GamepadButton, GamepadAction> _buttonOverrides = {};
+
+  /// Define mapeamento personalizado de botões.
+  void setButtonOverrides(Map<GamepadButton, GamepadAction> overrides) {
+    _buttonOverrides
+      ..clear()
+      ..addAll(overrides);
+  }
+
+  /// Limpa mapeamento personalizado, retorna ao padrão.
+  void clearButtonOverrides() {
+    _buttonOverrides.clear();
+  }
+
+  /// Serializa o mapeamento para string (para persistência).
+  String serializeButtonMap() {
+    return _buttonOverrides.entries
+        .map((e) => '${e.key.name}=${e.value.name}')
+        .join(';');
+  }
+
+  /// Deserializa string de mapeamento (formato: "action=button;...").
+  /// Itens com valores invalidos/desconhecidos sao ignorados.
+  static Map<GamepadButton, GamepadAction> deserializeButtonMap(String data) {
+    final result = <GamepadButton, GamepadAction>{};
+    if (data.trim().isEmpty) return result;
+    final parts = data.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty);
+    for (final part in parts) {
+      final idx = part.indexOf('=');
+      if (idx <= 0 || idx >= part.length - 1) continue;
+      final buttonName = part.substring(0, idx);
+      final actionName = part.substring(idx + 1);
+      final button = _byName(GamepadButton.values, buttonName);
+      final action = _byName(GamepadAction.values, actionName);
+      if (button != null && action != null) {
+        result[button] = action;
+      }
+    }
+    return result;
+  }
+
+  static T? _byName<T extends Enum>(List<T> values, String name) {
+    for (final v in values) {
+      if (v.name == name) return v;
+    }
+    return null;
+  }
+
   GamepadAction? _actionForAxis(GamepadAxis axis, double value) {
     switch (axis) {
       case GamepadAxis.leftStickY:
@@ -257,5 +400,6 @@ class GamepadManager {
     _repeatTimer?.cancel();
     _actionsController.close();
     _connectionController.close();
+    _rawButtonsController.close();
   }
 }
