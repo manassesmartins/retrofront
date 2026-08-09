@@ -35,16 +35,13 @@ class AppDirs {
     }
 
     if (isAndroid) {
-      const legacyRoms = '/storage/emulated/0/ROMs';
-      if (Directory(legacyRoms).existsSync()) {
-        return Directory(legacyRoms);
-      }
-      final ext = await getExternalStorageDirectory();
-      if (ext != null) {
-        final d = Directory(p.join(ext.path, 'ROMs'));
-        await d.create(recursive: true);
-        return d;
-      }
+      // Pasta publica padrao (convencao do ES-DE/RetroArch). Evita cair no
+      // diretorio privado do app (Android/data/...), onde o usuario nao
+      // colocaria ROMs.
+      const publicRoms = '/storage/emulated/0/ROMs';
+      final d = Directory(publicRoms);
+      if (!await d.exists()) await d.create(recursive: true);
+      return d;
     }
     if (isIOS) {
       final doc = await getApplicationDocumentsDirectory();

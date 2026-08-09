@@ -36,6 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.5.5
   path_provider: ^2.1.6
+  # path_provider_android 2.3+ usa o pacote jni (native assets + Gradle), que
+  # quebra o build em alguns ambientes. A linha 2.2.x usa canais classicos.
+  path_provider_android: 2.2.15
   path: ^1.9.1
   http: ^1.6.0
   gamepads: ^0.1.10+5

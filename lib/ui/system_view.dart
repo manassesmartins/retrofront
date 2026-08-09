@@ -25,7 +25,7 @@ class SystemView extends StatefulWidget {
   State<SystemView> createState() => _SystemViewState();
 }
 
-class _SystemViewState extends State<SystemView> {
+class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   AppServices get _svc => AppScope.of(context);
 
   List<SystemEntry> _systems = [];
@@ -38,6 +38,23 @@ class _SystemViewState extends State<SystemView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _gamepadSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Ao voltar da tela de permissao/configuracoes do Android (o pedido de
+    // "All files access" nao bloqueia ate o usuario retornar), re-escaneia.
+    if (state == AppLifecycleState.resumed && AndroidStorage.isNeeded) {
+      _load();
+    }
   }
 
   @override
@@ -49,13 +66,8 @@ class _SystemViewState extends State<SystemView> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _gamepadSub?.cancel();
-    super.dispose();
-  }
-
   Future<void> _load() async {
+    final prevName = _systems.isEmpty ? null : _systems[_selected].name;
     setState(() {
       _loading = true;
       _hasError = false;
@@ -76,7 +88,10 @@ class _SystemViewState extends State<SystemView> {
       if (!mounted) return;
       setState(() {
         _systems = systems;
-        _selected = 0;
+        final idx = prevName == null
+            ? 0
+            : systems.indexWhere((s) => s.name == prevName);
+        _selected = idx < 0 ? 0 : idx;
         _loading = false;
       });
     } catch (_) {
