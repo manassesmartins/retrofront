@@ -23,11 +23,19 @@ class _ButtonMapViewState extends State<ButtonMapView> {
   StreamSubscription<GamepadAction>? _gamepadSub;
   StreamSubscription<GamepadButton>? _rawSub;
   int _selected = 0;
+  bool _depsReady = false;
 
   @override
   void initState() {
     super.initState();
     _map = {};
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _rawSub = _svc.gamepad.rawButtons.listen(_onRawButton);
   }

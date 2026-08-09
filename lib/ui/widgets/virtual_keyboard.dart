@@ -204,6 +204,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
   bool _shift = false;
   int _row = 0;
   int _col = 0;
+  bool _depsReady = false;
 
   @override
   void initState() {
@@ -212,6 +213,13 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = AppScope.of(context).gamepad.actions.listen(_onGamepad);
   }
 

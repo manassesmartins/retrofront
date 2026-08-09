@@ -32,11 +32,19 @@ class _GameDetailViewState extends State<GameDetailView> {
   late GameMetadata? _metadata;
   bool _scraping = false;
   StreamSubscription<GamepadAction>? _gamepadSub;
+  bool _depsReady = false;
 
   @override
   void initState() {
     super.initState();
     _metadata = widget.game.metadata;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
   }
 

@@ -52,12 +52,20 @@ class _GamelistViewState extends State<GamelistView> {
   bool _loading = true;
   bool _searching = false;
   StreamSubscription<GamepadAction>? _gamepadSub;
+  bool _depsReady = false;
 
   static const int _pageStep = 8;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _load();
   }

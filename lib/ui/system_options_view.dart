@@ -27,10 +27,18 @@ class _SystemOptionsViewState extends State<SystemOptionsView> {
   late SystemOverride _override;
   int _selected = 0;
   StreamSubscription<GamepadAction>? _gamepadSub;
+  bool _depsReady = false;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _override = _svc.settings.getSystemOverride(widget.system.name) ??
         const SystemOverride();
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);

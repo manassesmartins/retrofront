@@ -33,10 +33,18 @@ class _SystemViewState extends State<SystemView> {
   bool _loading = true;
   bool _hasError = false;
   StreamSubscription<GamepadAction>? _gamepadSub;
+  bool _depsReady = false;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _load();
   }

@@ -35,6 +35,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
 
   int _selected = 0;
   StreamSubscription<GamepadAction>? _gamepadSub;
+  bool _depsReady = false;
 
   @override
   void initState() {
@@ -42,6 +43,13 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
     _rowKeys.addAll(
       List.generate(widget.category.options.length, (_) => GlobalKey()),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
   }
 

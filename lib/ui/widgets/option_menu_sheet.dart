@@ -55,10 +55,18 @@ class OptionMenuSheet extends StatefulWidget {
 class _OptionMenuSheetState extends State<OptionMenuSheet> {
   int _selected = 0;
   StreamSubscription<GamepadAction>? _gamepadSub;
+  bool _depsReady = false;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
     _gamepadSub = AppScope.of(context).gamepad.actions.listen(_onGamepad);
   }
 
