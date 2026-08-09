@@ -129,8 +129,9 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
     }
   }
 
+  // Abre a tela do sistema de "All files access" (via request no _load) e o
+  // scan re-roda ao voltar do Android (didChangeAppLifecycleState) e aqui.
   Future<void> _grantStorage() async {
-    await AndroidStorage.request();
     await _load();
   }
 

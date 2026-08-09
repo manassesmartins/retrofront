@@ -6,30 +6,44 @@ import 'package:permission_handler/permission_handler.dart';
 /// Acesso amplo ao armazenamento no Android (pastas publicas como
 /// /storage/emulated/0/ROMs).
 ///
-///  - Android 11+: exige o toggle "Allow all files access"
-///    (MANAGE_EXTERNAL_STORAGE), concedido via tela de configuracoes.
+///  - Android 11+ (API 30+): o scoped storage bloqueia arquivos arbitrarios e
+///    o acesso amplo so e concedido pelo toggle "Allow all files access"
+///    (MANAGE_EXTERNAL_STORAGE), via tela de configuracoes do sistema.
+///    A permissao READ_EXTERNAL_STORAGE (storage) NAO da esse acesso, entao nao
+///    conta como "concedido" nesta versao.
 ///  - Android <= 10: basta a permissao de leitura/escrita em tempo de execucao.
 class AndroidStorage {
   static bool get isNeeded => !kIsWeb && Platform.isAndroid;
 
-  static Future<bool> hasAccess() async {
-    if (!isNeeded) return true;
-    if (await Permission.manageExternalStorage.isGranted) return true;
-    if (await Permission.storage.isGranted) return true;
-    return false;
+  static bool get _isAndroid11Plus {
+    if (!isNeeded) return false;
+    final m =
+        RegExp(r'Android (\d+)').firstMatch(Platform.operatingSystemVersion);
+    final major = m == null ? 0 : (int.tryParse(m.group(1)!) ?? 0);
+    return major >= 11;
   }
 
-  /// Solicita o acesso: tenta a permissao simples primeiro e, se o dispositivo
-  /// exigir, abre a tela de "All files access" do sistema.
+  static Future<bool> hasAccess() async {
+    if (!isNeeded) return true;
+    if (_isAndroid11Plus) {
+      return await Permission.manageExternalStorage.isGranted;
+    }
+    return await Permission.storage.isGranted;
+  }
+
+  /// Solicita o acesso: no Android 11+ abre a tela de "All files access" do
+  /// sistema (so o usuario concede); em versoes antigas pede a permissao de
+  /// armazenamento em tempo de execucao.
   static Future<bool> request() async {
     if (!isNeeded) return true;
     if (await hasAccess()) return true;
 
-    if (await Permission.storage.request().isGranted) return true;
+    if (_isAndroid11Plus) {
+      await Permission.manageExternalStorage.request();
+      return hasAccess();
+    }
 
-    // Android 11+: a permissao ampla so pode ser concedida pelo usuario na tela
-    // de configuracoes do sistema.
-    await Permission.manageExternalStorage.request();
+    await Permission.storage.request();
     return hasAccess();
   }
 }

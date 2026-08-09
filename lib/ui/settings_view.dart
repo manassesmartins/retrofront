@@ -35,7 +35,7 @@ class SettingsView extends StatefulWidget {
   State<SettingsView> createState() => _SettingsViewState();
 }
 
-class _SettingsViewState extends State<SettingsView> {
+class _SettingsViewState extends State<SettingsView> with WidgetsBindingObserver {
   AppServices get _svc => AppScope.of(context);
 
   List<SettingsCategory> _categories = [];
@@ -50,6 +50,22 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _gamepadSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Ao voltar da tela de "All files access" do Android, atualiza o status.
+    if (state == AppLifecycleState.resumed && AndroidStorage.isNeeded) {
+      _load();
+    }
   }
 
   @override
@@ -59,12 +75,6 @@ class _SettingsViewState extends State<SettingsView> {
     _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _load();
-  }
-
-  @override
-  void dispose() {
-    _gamepadSub?.cancel();
-    super.dispose();
   }
 
   Future<void> _load() async {
