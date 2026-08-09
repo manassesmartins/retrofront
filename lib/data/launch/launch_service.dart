@@ -33,7 +33,10 @@ class LaunchService {
     return _launchDesktop(system, game);
   }
 
-  Future<LaunchResult> _launchDesktop(SystemDefinition system, GameEntry game) async {
+  Future<LaunchResult> _launchDesktop(
+    SystemDefinition system,
+    GameEntry game,
+  ) async {
     final rawCommand = system.command;
     if (rawCommand == null || rawCommand.trim().isEmpty) {
       return const LaunchResult.failure(
@@ -107,13 +110,14 @@ class LaunchService {
   /// Troca o core do RetroArch no comando (apos `-L`) pelo core escolhido.
   /// Aceita nome curto ("mesen") ou caminho/arquivo completo.
   static String replaceCore(String cmd, String core) {
-    final coreToken = core.contains('/') ||
-            core.contains(r'\') ||
-            core.contains('.')
+    final coreToken =
+        core.contains('/') || core.contains(r'\') || core.contains('.')
         ? core
         : '${core}_libretro.so';
     final replaced = cmd.replaceAllMapped(
-        RegExp(r'(-L\s+)\S+', caseSensitive: false), (m) => '${m[1]}$coreToken');
+      RegExp(r'(-L\s+)\S+', caseSensitive: false),
+      (m) => '${m[1]}$coreToken',
+    );
     if (replaced == cmd) {
       return cmd.replaceFirst('%ROM%', '-L $coreToken %ROM%');
     }
@@ -146,13 +150,24 @@ class LaunchService {
   static String _escapeCfg(String s) =>
       s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
-  Future<LaunchResult> _launchAndroid(SystemDefinition system, GameEntry game) async {
+  Future<LaunchResult> _launchAndroid(
+    SystemDefinition system,
+    GameEntry game,
+  ) async {
+    final pkg = await _androidRetroArchPackage();
+    if (pkg == null) {
+      return const LaunchResult.failure(
+        'RetroArch não está instalado. Instale o RetroArch na Play Store '
+        'ou em retroarch.com para jogar.',
+      );
+    }
     const channel = MethodChannel('retrofront/launcher');
     try {
       final ok = await channel.invokeMethod<bool>('launchRetroArch', game.path);
       if (ok == true) return const LaunchResult.success();
-      return const LaunchResult.failure(
-        'RetroArch não está instalado ou não suporta este formato.',
+      return LaunchResult.failure(
+        'Não foi possível abrir "${game.name}". O formato pode não ser '
+        'suportado pelo RetroArch ou o arquivo não está acessível.',
       );
     } on PlatformException catch (e) {
       return LaunchResult.failure(e.message ?? 'Falha ao lançar emulador.');
@@ -232,7 +247,8 @@ class LaunchService {
       if (pf86.isNotEmpty) '$pf86\\RetroArch\\retroarch.exe',
       if (pf86.isNotEmpty)
         '$pf86\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
-      if (pf.isNotEmpty) '$pf\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
+      if (pf.isNotEmpty)
+        '$pf\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
       r'C:\RetroArch-Win64\retroarch.exe',
       r'C:\RetroArch\retroarch.exe',
     ];
@@ -301,10 +317,9 @@ class LaunchService {
 
   Future<String?> _which(String name) async {
     try {
-      final result = await Process.run(
-        Platform.isWindows ? 'where' : 'which',
-        [name],
-      );
+      final result = await Process.run(Platform.isWindows ? 'where' : 'which', [
+        name,
+      ]);
       if (result.exitCode == 0) {
         final line = result.stdout.toString().trim().split('\n').first;
         if (line.isNotEmpty) return line;

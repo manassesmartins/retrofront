@@ -32,6 +32,10 @@ class SettingsService {
   static const _kRaUsername = 'ra_username';
   static const _kRaPassword = 'ra_password';
   static const _kSystemOverrides = 'system_overrides';
+  static const _kUiMode = 'ui_mode';
+  static const _kScreensaverEnabled = 'screensaver_enabled';
+  static const _kScreensaverDelay = 'screensaver_delay';
+  static const _kNavSounds = 'nav_sounds';
 
   static const _allowList = {
     _kRomsPath,
@@ -59,6 +63,10 @@ class SettingsService {
     _kRaUsername,
     _kRaPassword,
     _kSystemOverrides,
+    _kUiMode,
+    _kScreensaverEnabled,
+    _kScreensaverDelay,
+    _kNavSounds,
   };
 
   SharedPreferencesWithCache? _prefs;
@@ -160,7 +168,7 @@ class SettingsService {
   Future<void> setButtonScheme(String value) =>
       _p.setString(_kButtonScheme, value);
 
-/// Idioma do sistema: 'pt-BR', 'en-US', 'es-ES', 'fr-FR', 'de-DE' ou
+  /// Idioma do sistema: 'pt-BR', 'en-US', 'es-ES', 'fr-FR', 'de-DE' ou
   /// 'it-IT'. Usado pelo teclado virtual (e futuras traduções da interface).
   String getLanguage() => _p.getString(_kLanguage) ?? 'pt-BR';
 
@@ -209,8 +217,7 @@ class SettingsService {
   /// Senha RetroAchievements (salva localmente para o RetroArch).
   String getRaPassword() => _p.getString(_kRaPassword) ?? '';
 
-  Future<void> setRaPassword(String value) =>
-      _p.setString(_kRaPassword, value);
+  Future<void> setRaPassword(String value) => _p.setString(_kRaPassword, value);
 
   /// Sobrescritas por sistema (core/args), persistidas em um único JSON.
   Map<String, SystemOverride> getSystemOverrides() {
@@ -220,8 +227,9 @@ class SettingsService {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       final result = <String, SystemOverride>{};
       for (final e in decoded.entries) {
-        result[e.key] =
-            SystemOverride.fromJson(e.value as Map<String, dynamic>);
+        result[e.key] = SystemOverride.fromJson(
+          e.value as Map<String, dynamic>,
+        );
       }
       return result;
     } catch (_) {
@@ -233,7 +241,9 @@ class SettingsService {
       getSystemOverrides()[systemName];
 
   Future<void> setSystemOverride(
-      String systemName, SystemOverride? override) async {
+    String systemName,
+    SystemOverride? override,
+  ) async {
     final map = getSystemOverrides();
     if (override == null || !override.isSet) {
       map.remove(systemName);
@@ -249,4 +259,27 @@ class SettingsService {
       await _p.setString(_kSystemOverrides, json);
     }
   }
+
+  /// Modo de usuário: 'full' (configurações acessíveis) ou 'kiosk'
+  /// (interface de quiosque, sem acesso às configurações).
+  String getUiMode() => _p.getString(_kUiMode) ?? 'full';
+
+  Future<void> setUiMode(String value) => _p.setString(_kUiMode, value);
+
+  /// Protetor de tela: escurece a tela após um período sem interação.
+  bool getScreensaverEnabled() => _p.getBool(_kScreensaverEnabled) ?? true;
+
+  Future<void> setScreensaverEnabled(bool value) =>
+      _p.setBool(_kScreensaverEnabled, value);
+
+  /// Tempo de inatividade (em minutos) antes do protetor de tela aparecer.
+  int getScreensaverDelay() => _p.getInt(_kScreensaverDelay) ?? 3;
+
+  Future<void> setScreensaverDelay(int value) =>
+      _p.setInt(_kScreensaverDelay, value);
+
+  /// Sons de navegação na interface (clique ao navegar com o direcional).
+  bool getNavSounds() => _p.getBool(_kNavSounds) ?? true;
+
+  Future<void> setNavSounds(bool value) => _p.setBool(_kNavSounds, value);
 }

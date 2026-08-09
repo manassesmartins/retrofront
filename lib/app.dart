@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/app_scope.dart';
+import 'gamepad/gamepad_manager.dart';
 import 'ui/system_view.dart';
 import 'ui/theme.dart';
 
@@ -14,11 +18,37 @@ class RetroFrontApp extends StatefulWidget {
 
 class _RetroFrontAppState extends State<RetroFrontApp> {
   late final Future<AppServices> _services;
+  StreamSubscription<GamepadAction>? _soundSub;
 
   @override
   void initState() {
     super.initState();
     _services = AppServices.build();
+    // Sons de navegação globais (liga/desliga em Configurações > Interface).
+    _services.then((services) {
+      _soundSub = services.gamepad.actions.listen((action) {
+        if (!services.settings.getNavSounds()) return;
+        switch (action) {
+          case GamepadAction.up:
+          case GamepadAction.down:
+          case GamepadAction.left:
+          case GamepadAction.right:
+          case GamepadAction.confirm:
+          case GamepadAction.back:
+          case GamepadAction.pageUp:
+          case GamepadAction.pageDown:
+            SystemSound.play(SystemSoundType.click);
+          default:
+            break;
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _soundSub?.cancel();
+    super.dispose();
   }
 
   @override

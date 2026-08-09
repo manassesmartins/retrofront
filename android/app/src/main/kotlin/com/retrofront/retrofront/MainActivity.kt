@@ -38,6 +38,33 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "retrofront/system"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getStorage" -> {
+                    result.success(storageInfo())
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    /** Espaço livre/total do armazenamento (bytes), usado nas Configurações. */
+    private fun storageInfo(): Map<String, Long> {
+        return try {
+            val stat = android.os.StatFs(
+                android.os.Environment.getExternalStorageDirectory()?.path
+                    ?: android.os.Environment.getDataDirectory().path
+            )
+            mapOf(
+                "free" to stat.availableBytes,
+                "total" to stat.totalBytes
+            )
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
 
     private val retroarchPackages = listOf("com.retroarch", "com.retroarch.bq.plus")

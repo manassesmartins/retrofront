@@ -120,11 +120,22 @@ void main() {
   });
 
   group('VirtualKeyboard', () {
-    test('layout pt-BR tem linha de acentos no topo', () {
+    test('layout pt-BR comeca pelo QWERTY e acentos ficam em simbolos', () {
       final layout = VkLayout.ofLanguage('pt-BR');
       final rows = vkRows(layout, symbols: false, shift: false);
-      expect(rows.first.map((k) => k.char).join(), contains('á'));
-      expect(rows.first.map((k) => k.char).join(), contains('ç'));
+      final letters = rows
+          .map((r) => r.map((k) => k.char).join())
+          .where((s) => s.isNotEmpty)
+          .join();
+      // Primeiro o QWERTY, sem acentos na pagina principal.
+      expect(letters, startsWith('qwertyuiop'));
+      expect(letters, isNot(contains('á')));
+      expect(letters, isNot(contains('ç')));
+      // Acentos disponíveis na pagina de simbolos.
+      final symRows = vkRows(layout, symbols: true, shift: false);
+      final symAll = symRows.map((r) => r.map((k) => k.char).join()).join();
+      expect(symAll, contains('á'));
+      expect(symAll, contains('ç'));
       // Ultima linha: acoes (shift, backspace, sym, espaço, ok).
       final last = rows.last;
       expect(last.every((k) => k.isAction), isTrue);

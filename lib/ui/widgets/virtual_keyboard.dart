@@ -37,7 +37,8 @@ class VkLayout {
   final String id;
   final String label;
 
-  /// Letras acentuadas específicas do idioma (linha extra em caixa baixa).
+  /// Letras acentuadas específicas do idioma (linhas extras na página de
+  /// símbolos, com até 10 teclas por linha).
   final List<String> accentRows;
 
   /// Linhas de letras (caixa baixa); o teclado gera a versão maiúscula.
@@ -66,7 +67,7 @@ class VkLayout {
     const VkLayout(
       id: 'pt-BR',
       label: 'Português',
-      accentRows: ['áàâãéêíóôõúüç'],
+      accentRows: ['áàâãéêíóôõ', 'úüç'],
       letterRows: ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'],
       symbolRows: [
         '1234567890',
@@ -89,7 +90,7 @@ class VkLayout {
     const VkLayout(
       id: 'fr-FR',
       label: 'Français',
-      accentRows: ['àâçéèêëîïôùûüœ'],
+      accentRows: ['àâçéèêëîïô', 'ùûüœ'],
       letterRows: ['azertyuiop', 'qsdfghjklm', 'wxcvbn'],
       symbolRows: [
         '1234567890',
@@ -134,7 +135,8 @@ class VkLayout {
 }
 
 /// Constrói a grade de teclas para a página atual (letras ou símbolos) com
-/// a caixa alta aplicada quando [shift] estiver ativo.
+/// a caixa alta aplicada quando [shift] estiver ativo. As letras seguem o
+/// layout QWERTY; os acentos ficam na página de símbolos.
 List<List<VkKey>> vkRows(
   VkLayout layout, {
   required bool symbols,
@@ -144,11 +146,6 @@ List<List<VkKey>> vkRows(
   String upper(String c) => shift ? c.toUpperCase() : c;
 
   if (!symbols) {
-    if (layout.accentRows.isNotEmpty) {
-      for (final line in layout.accentRows) {
-        rows.add([for (final c in line.split('')) VkKey.char(upper(c))]);
-      }
-    }
     for (final line in layout.letterRows) {
       rows.add([for (final c in line.split('')) VkKey.char(upper(c))]);
     }
@@ -161,6 +158,9 @@ List<List<VkKey>> vkRows(
     ]);
   } else {
     for (final line in layout.symbolRows) {
+      rows.add([for (final c in line.split('')) VkKey.char(c)]);
+    }
+    for (final line in layout.accentRows) {
       rows.add([for (final c in line.split('')) VkKey.char(c)]);
     }
     rows.add(const [

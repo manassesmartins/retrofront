@@ -104,9 +104,11 @@ class _GamelistViewState extends State<GamelistView> {
       _filtered = List.of(_games);
     } else {
       _filtered = _games
-          .where((g) =>
-              g.name.toLowerCase().contains(q) ||
-              g.displayName.toLowerCase().contains(q))
+          .where(
+            (g) =>
+                g.name.toLowerCase().contains(q) ||
+                g.displayName.toLowerCase().contains(q),
+          )
           .toList();
     }
     _sort();
@@ -252,8 +254,7 @@ class _GamelistViewState extends State<GamelistView> {
   }
 
   Future<void> _play(GameEntry game) async {
-    final result =
-        await _svc.launcher.launch(widget.system.definition, game);
+    final result = await _svc.launcher.launch(widget.system.definition, game);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -270,11 +271,9 @@ class _GamelistViewState extends State<GamelistView> {
     if (_filtered.isEmpty) return;
     final entry = _filtered[_selected];
     if (entry.isFolder) return;
-    Navigator.of(context).push(
-      consoleRoute(
-        GameDetailView(system: widget.system, game: entry),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(consoleRoute(GameDetailView(system: widget.system, game: entry)));
   }
 
   void _goBack() {
@@ -284,6 +283,7 @@ class _GamelistViewState extends State<GamelistView> {
   }
 
   void _openMenu() {
+    final kiosk = _svc.settings.getUiMode() == 'kiosk';
     OptionMenuSheet.show(
       context,
       OptionMenuSheet(
@@ -291,9 +291,15 @@ class _GamelistViewState extends State<GamelistView> {
         options: [
           MenuOption(
             label: 'Baixar capas e informações',
-            subtitle: 'Scraping em rede para todos os jogos',
+            subtitle: 'Só jogos sem capa (recomendado)',
             icon: Icons.cloud_download,
             onTap: _scrapeAll,
+          ),
+          MenuOption(
+            label: 'Baixar tudo',
+            subtitle: 'Refaz o scraping mesmo nos jogos com capa',
+            icon: Icons.cloud_sync,
+            onTap: () => _scrapeAll(onlyMissing: false),
           ),
           MenuOption(
             label: 'Buscar',
@@ -305,30 +311,34 @@ class _GamelistViewState extends State<GamelistView> {
             icon: Icons.refresh,
             onTap: _load,
           ),
-          MenuOption(
-            label: 'Opções do sistema',
-            subtitle: 'Core e argumentos extras deste console',
-            icon: Icons.tune,
-            onTap: () {
-              Navigator.of(context).push(
-                consoleRoute(
-                  SystemOptionsView(system: widget.system.definition),
-                ),
-              );
-            },
-          ),
+          if (!kiosk)
+            MenuOption(
+              label: 'Opções do sistema',
+              subtitle: 'Core e argumentos extras deste console',
+              icon: Icons.tune,
+              onTap: () {
+                Navigator.of(context).push(
+                  consoleRoute(
+                    SystemOptionsView(system: widget.system.definition),
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
   }
 
-  Future<void> _scrapeAll() async {
+  Future<void> _scrapeAll({bool onlyMissing = true}) async {
     final result = await showDialog<({int total, int success, int failed})>(
       context: context,
       barrierDismissible: false,
       builder: (_) => ScrapeProgressDialog(
-        runner: (onProgress) =>
-            _svc.scrape.scrapSystem(widget.system, onProgress: onProgress),
+        runner: (onProgress) => _svc.scrape.scrapSystem(
+          widget.system,
+          onProgress: onProgress,
+          onlyMissing: onlyMissing,
+        ),
       ),
     );
     if (!mounted) return;
@@ -422,39 +432,38 @@ class _GamelistViewState extends State<GamelistView> {
                             ),
                           )
                         : _filtered.isEmpty
-                            ? _EmptyState(searching: _searching)
-                            : isLandscape
-                                ? Row(
-                                    children: [
-                                      SizedBox(
-                                        width: MediaQuery.of(context).size.width *
-                                            0.42,
-                                        child: _buildList(),
-                                      ),
-                                      Expanded(
-                                        child: _DetailPanel(
-                                          entry: selected!,
-                                          onPlay: () => _openSelected(),
-                                          onOpenFolder: _openSelected,
-                                          onDetails: _openDetails,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Column(
-                                    children: [
-                                      Expanded(child: _buildList()),
-                                      SizedBox(
-                                        height: 240,
-                                        child: _DetailPanel(
-                                          entry: selected!,
-                                          onPlay: () => _openSelected(),
-                                          onOpenFolder: _openSelected,
-                                          onDetails: _openDetails,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                        ? _EmptyState(searching: _searching)
+                        : isLandscape
+                        ? Row(
+                            children: [
+                              SizedBox(
+                                width: MediaQuery.of(context).size.width * 0.42,
+                                child: _buildList(),
+                              ),
+                              Expanded(
+                                child: _DetailPanel(
+                                  entry: selected!,
+                                  onPlay: () => _openSelected(),
+                                  onOpenFolder: _openSelected,
+                                  onDetails: _openDetails,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              Expanded(child: _buildList()),
+                              SizedBox(
+                                height: 240,
+                                child: _DetailPanel(
+                                  entry: selected!,
+                                  onPlay: () => _openSelected(),
+                                  onOpenFolder: _openSelected,
+                                  onDetails: _openDetails,
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
                   _hints(),
                 ],
@@ -710,10 +719,7 @@ class _DetailPanel extends StatelessWidget {
             [genre, year, players].whereType<String>().join(' • '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 13,
-            ),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
         ],
         if (showRatings && meta?.rating != null) ...[

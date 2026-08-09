@@ -8,17 +8,21 @@ import '../core/android_storage.dart';
 import '../core/app_dirs.dart';
 import '../core/app_languages.dart';
 import '../core/app_scope.dart';
+import '../core/device_info.dart';
 import '../core/screen_mode.dart';
 import '../gamepad/gamepad_manager.dart';
+import '../models/system.dart';
 import 'settings_category_view.dart';
 import 'settings_options.dart';
 import 'cover_systems_view.dart';
+import 'system_options_view.dart';
 import 'theme.dart';
 import 'widgets/console_route.dart';
 import 'widgets/cover_backdrop.dart';
 import 'widgets/cover_carousel.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
+import 'widgets/option_menu_sheet.dart';
 import 'widgets/virtual_keyboard.dart';
 import 'button_map_view.dart';
 
@@ -47,6 +51,7 @@ class _SettingsViewState extends State<SettingsView>
   bool _androidAccess = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
   bool _depsReady = false;
+  DeviceInfo? _deviceInfo;
 
   @override
   void initState() {
@@ -85,6 +90,10 @@ class _SettingsViewState extends State<SettingsView>
       androidAccess = await AndroidStorage.hasAccess();
     }
     final retroArch = await _svc.launcher.findRetroArch();
+    unawaited(() async {
+      final info = await collectDeviceInfo();
+      if (mounted) setState(() => _deviceInfo = info);
+    }());
     if (!mounted) return;
     setState(() {
       _defaultRoms = defaultRoms;
@@ -99,12 +108,29 @@ class _SettingsViewState extends State<SettingsView>
     final s = _svc.settings;
     return [
       SettingsCategory(
-        label: 'Biblioteca',
+        label: 'Sistema',
         description:
-            'Onde ficam os jogos, a ordenação da lista e como o app '
-            'acessa o armazenamento.',
-        icon: Icons.video_library_outlined,
+            'Idioma, informações do aparelho e acesso ao armazenamento.',
+        icon: Icons.settings_outlined,
         options: [
+          SettingsOption(
+            label: 'Idioma da interface',
+            description:
+                'Idioma usado pelo teclado virtual e pela interface. '
+                'Define também o layout de letras (acentos) do teclado.',
+            cycleValues: [for (final l in appLanguages) (l.id, l.label)],
+            currentIndex: () => _cycleIndex([
+              for (final l in appLanguages) l.id,
+            ], s.getLanguage()),
+            onCycle: (idx) => s.setLanguage(appLanguages[idx].id),
+          ),
+          SettingsOption(
+            label: 'Informações do sistema',
+            description:
+                'Versão do app, espaço em disco e endereço IP da rede.',
+            display: () => _deviceInfo?.ip ?? 'versão, disco e IP',
+            onConfirm: (ctx) => _showSystemInfo(ctx),
+          ),
           SettingsOption(
             label: 'Pasta de ROMs',
             description:
@@ -135,6 +161,13 @@ class _SettingsViewState extends State<SettingsView>
                 if (mounted) setState(() => _androidAccess = granted);
               },
             ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'Jogos',
+        description: 'Como os jogos são listados e configurados por console.',
+        icon: Icons.video_library_outlined,
+        options: [
           SettingsOption(
             label: 'Ordenar jogos por',
             description: 'Como os jogos aparecem na lista de cada console.',
@@ -160,10 +193,265 @@ class _SettingsViewState extends State<SettingsView>
             toggle: () => s.getShowGameCount(),
             onToggle: (v) => s.setShowGameCount(v),
           ),
+          SettingsOption(
+            label: 'Mostrar avaliações',
+            description:
+                'Exibe as estrelas de avaliação (rating) na lista e '
+                'nos detalhes dos jogos.',
+            toggle: () => s.getShowRatings(),
+            onToggle: (v) => s.setShowRatings(v),
+          ),
+          SettingsOption(
+            label: 'Configuração por console',
+            description:
+                'Ajustes específicos de cada sistema: núcleo (core) do '
+                'RetroArch e argumentos extras que sobrescrevem os padrões.',
+            display: () {
+              final count = s.getSystemOverrides().length;
+              return count == 0
+                  ? 'padrão'
+                  : '$count console${count == 1 ? '' : 's'}';
+            },
+            onConfirm: (ctx) => _pickSystemAndConfigure(ctx),
+          ),
         ],
       ),
       SettingsCategory(
-        label: 'Internet',
+        label: 'Interface',
+        description: 'Aparência, modo de usuário, protetor de tela e som.',
+        icon: Icons.palette_outlined,
+        options: [
+          SettingsOption(
+            label: 'Tema escuro',
+            description:
+                'Usa o tema escuro "console". Desligue para o tema '
+                'claro.',
+            toggle: () => s.getDarkMode(),
+            onToggle: (v) {
+              s.setDarkMode(v);
+              _svc.darkMode.value = v;
+            },
+          ),
+          SettingsOption(
+            label: 'Mostrar dicas',
+            description:
+                'Exibe a barra de atalhos (dicas) no rodapé das telas.',
+            toggle: () => s.getShowHints(),
+            onToggle: (v) => s.setShowHints(v),
+          ),
+          SettingsOption(
+            label: 'Modo de usuário',
+            description:
+                '"Quiosque" esconde as configurações e as opções do '
+                'sistema, deixando apenas a navegação pelos jogos.',
+            cycleValues: const [('full', 'Completo'), ('kiosk', 'Quiosque')],
+            currentIndex: () =>
+                _cycleIndex(const ['full', 'kiosk'], s.getUiMode()),
+            onCycle: (idx) => s.setUiMode(const ['full', 'kiosk'][idx]),
+          ),
+          SettingsOption(
+            label: 'Protetor de tela',
+            description:
+                'Escurece a tela e mostra o relógio após um período sem '
+                'interação. Qualquer toque ou botão faz voltar.',
+            toggle: () => s.getScreensaverEnabled(),
+            onToggle: (v) => s.setScreensaverEnabled(v),
+          ),
+          SettingsOption(
+            label: 'Tempo do protetor de tela',
+            description:
+                'Minutos de inatividade antes do protetor de tela ativar.',
+            cycleValues: const [
+              (1, '1 minuto'),
+              (2, '2 minutos'),
+              (3, '3 minutos'),
+              (5, '5 minutos'),
+              (10, '10 minutos'),
+            ],
+            currentIndex: () =>
+                _cycleIndex(const [1, 2, 3, 5, 10], s.getScreensaverDelay()),
+            onCycle: (idx) =>
+                s.setScreensaverDelay(const [1, 2, 3, 5, 10][idx]),
+          ),
+          SettingsOption(
+            label: 'Sons de navegação',
+            description:
+                'Toca um clique ao navegar pelos menus com o controle.',
+            toggle: () => s.getNavSounds(),
+            onToggle: (v) => s.setNavSounds(v),
+          ),
+          SettingsOption(
+            label: 'Tela cheia (imersiva)',
+            description:
+                'Oculta as barras do sistema em dispositivos móveis '
+                'para uma experiência de console.',
+            toggle: () => s.getFullscreen(),
+            onToggle: (v) {
+              s.setFullscreen(v);
+              ScreenMode.setFullscreen(v);
+            },
+          ),
+          if (AppDirs.isAndroid || AppDirs.isIOS)
+            SettingsOption(
+              label: 'Travar paisagem',
+              description: 'Mantém a interface sempre na horizontal.',
+              toggle: () => s.getLandscapeLock(),
+              onToggle: (v) {
+                s.setLandscapeLock(v);
+                if (v) {
+                  ScreenMode.lockLandscape();
+                } else {
+                  // Sem preferencia forçada: acompanha o sensor.
+                  SystemChrome.setPreferredOrientations([]);
+                }
+              },
+            ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'Controles',
+        description: 'Mapeamento de botões e comportamento da navegação.',
+        icon: Icons.sports_esports_outlined,
+        options: [
+          SettingsOption(
+            label: 'Mapear botões',
+            description:
+                'Redefina os botões do controle para ações do frontend. '
+                'Pressione para atribuir.',
+            display: () {
+              final hasMap = s.getButtonMap().trim().isNotEmpty;
+              return hasMap ? 'Personalizado' : 'Padrão';
+            },
+            onConfirm: (ctx) async {
+              Navigator.of(ctx).push(consoleRoute(const ButtonMapView()));
+            },
+          ),
+          SettingsOption(
+            label: 'Esquema de botões',
+            description:
+                'Padrão usa A=confirmar e B=voltar (Xbox/Sony). '
+                '"Nintendo" troca os dois, como no RetroArch.',
+            cycleValues: const [
+              ('standard', 'Padrão (A/B)'),
+              ('nintendo', 'Nintendo (B/A)'),
+            ],
+            currentIndex: () => _cycleIndex(const [
+              'standard',
+              'nintendo',
+            ], s.getButtonScheme()),
+            onCycle: (idx) {
+              final scheme = const ['standard', 'nintendo'][idx];
+              s.setButtonScheme(scheme);
+              _svc.gamepad.setButtonScheme(scheme);
+            },
+          ),
+          SettingsOption(
+            label: 'Repetição da navegação',
+            description:
+                'Tempo entre as repetições ao segurar o direcional. '
+                'Valores menores repetem mais rápido.',
+            cycleValues: const [
+              (150, '150 ms'),
+              (300, '300 ms'),
+              (450, '450 ms'),
+              (600, '600 ms'),
+            ],
+            currentIndex: () =>
+                _cycleIndex(const [150, 300, 450, 600], s.getGamepadRepeatMs()),
+            onCycle: (idx) {
+              final ms = const [150, 300, 450, 600][idx];
+              s.setGamepadRepeatMs(ms);
+              _svc.gamepad.setRepeatInterval(Duration(milliseconds: ms));
+            },
+          ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'Emulador',
+        description:
+            'Detecção do RetroArch instalado e opções de inicialização.',
+        icon: Icons.memory,
+        options: [
+          if (AppDirs.isAndroid || AppDirs.isIOS)
+            SettingsOption(
+              label: 'RetroArch detectado',
+              description:
+                  'O app procura o RetroArch instalado em qualquer '
+                  'versão do Android/iOS automaticamente. Use A para '
+                  'verificar novamente.',
+              display: () => _retroArch ?? 'não instalado',
+              onConfirm: (ctx) async {
+                final detected = await _svc.launcher.findRetroArch();
+                if (mounted) setState(() => _retroArch = detected);
+              },
+            )
+          else
+            SettingsOption(
+              label: 'Caminho do RetroArch',
+              description:
+                  'Executável do RetroArch usado para iniciar os '
+                  'jogos. Se vazio, é procurado automaticamente no PATH, '
+                  'em pastas comuns de instalação e no Flatpak/snap.',
+              display: () {
+                final override = s.getRetroArchPath();
+                if (override != null && override.isNotEmpty) return override;
+                return _retroArch ?? 'não encontrado';
+              },
+              onConfirm: (ctx) async {
+                final result = await FilePicker.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['exe', 'sh', 'bin'],
+                );
+                final path = result?.files.single.path;
+                if (path != null) {
+                  await s.setRetroArchPath(path);
+                  if (mounted) setState(() => _retroArch = path);
+                }
+              },
+            ),
+          SettingsOption(
+            label: 'Argumentos extras do RetroArch',
+            description:
+                'Parâmetros adicionais passados ao RetroArch antes do '
+                'jogo (ex.: --fullscreen). Se vazio, nenhum é adicionado.',
+            display: () {
+              final args = s.getRetroArchArgs();
+              return (args == null || args.isEmpty) ? 'nenhum' : args;
+            },
+            onConfirm: (ctx) async {
+              final value = await showVirtualKeyboardDialog(
+                ctx,
+                title: 'Argumentos extras',
+                initial: s.getRetroArchArgs() ?? '',
+                language: s.getLanguage(),
+              );
+              if (value != null) {
+                await s.setRetroArchArgs(value);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'Rede',
+        description:
+            'Endereço IP do aparelho. Configurar Wi-Fi e conexões é '
+            'feito pelo próprio sistema operacional.',
+        icon: Icons.wifi_outlined,
+        options: [
+          SettingsOption(
+            label: 'Endereço IP',
+            description:
+                'IP do aparelho na rede local. Pressione para ver as '
+                'informações completas da rede.',
+            display: () => _deviceInfo?.ip ?? 'sem rede',
+            onConfirm: (ctx) => _showSystemInfo(ctx, networkOnly: true),
+          ),
+        ],
+      ),
+      SettingsCategory(
+        label: 'Scraper',
         description: 'De onde o app baixa capas e informações dos jogos.',
         icon: Icons.cloud_download_outlined,
         options: [
@@ -322,137 +610,6 @@ class _SettingsViewState extends State<SettingsView>
         ],
       ),
       SettingsCategory(
-        label: 'Emulador',
-        description:
-            'Detecção do RetroArch instalado e opções de inicialização.',
-        icon: Icons.memory,
-        options: [
-          if (AppDirs.isAndroid || AppDirs.isIOS)
-            SettingsOption(
-              label: 'RetroArch detectado',
-              description:
-                  'O app procura o RetroArch instalado em qualquer '
-                  'versão do Android/iOS automaticamente. Use A para '
-                  'verificar novamente.',
-              display: () => _retroArch ?? 'não instalado',
-              onConfirm: (ctx) async {
-                final detected = await _svc.launcher.findRetroArch();
-                if (mounted) setState(() => _retroArch = detected);
-              },
-            )
-          else
-            SettingsOption(
-              label: 'Caminho do RetroArch',
-              description:
-                  'Executável do RetroArch usado para iniciar os '
-                  'jogos. Se vazio, é procurado automaticamente no PATH, '
-                  'em pastas comuns de instalação e no Flatpak/snap.',
-              display: () {
-                final override = s.getRetroArchPath();
-                if (override != null && override.isNotEmpty) return override;
-                return _retroArch ?? 'não encontrado';
-              },
-              onConfirm: (ctx) async {
-                final result = await FilePicker.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['exe', 'sh', 'bin'],
-                );
-                final path = result?.files.single.path;
-                if (path != null) {
-                  await s.setRetroArchPath(path);
-                  if (mounted) setState(() => _retroArch = path);
-                }
-              },
-            ),
-          SettingsOption(
-            label: 'Argumentos extras do RetroArch',
-            description:
-                'Parâmetros adicionais passados ao RetroArch antes do '
-                'jogo (ex.: --fullscreen). Se vazio, nenhum é adicionado.',
-            display: () {
-              final args = s.getRetroArchArgs();
-              return (args == null || args.isEmpty) ? 'nenhum' : args;
-            },
-            onConfirm: (ctx) async {
-              final value = await showVirtualKeyboardDialog(
-                ctx,
-                title: 'Argumentos extras',
-                initial: s.getRetroArchArgs() ?? '',
-                language: s.getLanguage(),
-              );
-              if (value != null) {
-                await s.setRetroArchArgs(value);
-                if (mounted) setState(() {});
-              }
-            },
-          ),
-          SettingsOption(
-            label: 'Mapear botões',
-            description:
-                'Redefina os botões do controle para ações do frontend. '
-                'Pressione para atribuir.',
-            display: () {
-              final hasMap = s.getButtonMap().trim().isNotEmpty;
-              return hasMap ? 'Personalizado' : 'Padrão';
-            },
-            onConfirm: (ctx) async {
-              Navigator.of(ctx).push(consoleRoute(const ButtonMapView()));
-            },
-          ),
-        ],
-      ),
-      SettingsCategory(
-        label: 'Aparência',
-        description: 'Tema e elementos visuais da interface.',
-        icon: Icons.palette_outlined,
-        options: [
-          SettingsOption(
-            label: 'Tema escuro',
-            description:
-                'Usa o tema escuro "console". Desligue para o tema '
-                'claro.',
-            toggle: () => s.getDarkMode(),
-            onToggle: (v) {
-              s.setDarkMode(v);
-              _svc.darkMode.value = v;
-            },
-          ),
-          SettingsOption(
-            label: 'Mostrar dicas',
-            description:
-                'Exibe a barra de atalhos (dicas) no rodapé das telas.',
-            toggle: () => s.getShowHints(),
-            onToggle: (v) => s.setShowHints(v),
-          ),
-          SettingsOption(
-            label: 'Mostrar avaliações',
-            description:
-                'Exibe as estrelas de avaliação (rating) na lista e '
-                'nos detalhes dos jogos.',
-            toggle: () => s.getShowRatings(),
-            onToggle: (v) => s.setShowRatings(v),
-          ),
-        ],
-      ),
-      SettingsCategory(
-        label: 'Sistema',
-        description: 'Idioma e preferências globais do aplicativo.',
-        icon: Icons.language,
-        options: [
-          SettingsOption(
-            label: 'Idioma da interface',
-            description:
-                'Idioma usado pelo teclado virtual e pela interface. '
-                'Define também o layout de letras (acentos) do teclado.',
-            cycleValues: [for (final l in appLanguages) (l.id, l.label)],
-            currentIndex: () => _cycleIndex([
-              for (final l in appLanguages) l.id,
-            ], s.getLanguage()),
-            onCycle: (idx) => s.setLanguage(appLanguages[idx].id),
-          ),
-        ],
-      ),
-      SettingsCategory(
         label: 'RetroAchievements',
         description:
             'Login e integração com o serviço de conquistas '
@@ -512,85 +669,102 @@ class _SettingsViewState extends State<SettingsView>
           ),
         ],
       ),
-      SettingsCategory(
-        label: 'Tela',
-        description: 'Como o app ocupa a tela do dispositivo.',
-        icon: Icons.aspect_ratio,
-        options: [
-          SettingsOption(
-            label: 'Tela cheia (imersiva)',
-            description:
-                'Oculta as barras do sistema em dispositivos móveis '
-                'para uma experiência de console.',
-            toggle: () => s.getFullscreen(),
-            onToggle: (v) {
-              s.setFullscreen(v);
-              ScreenMode.setFullscreen(v);
-            },
+    ];
+  }
+
+  Future<void> _showSystemInfo(
+    BuildContext context, {
+    bool networkOnly = false,
+  }) async {
+    final info = await collectDeviceInfo();
+    if (!context.mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text(
+          networkOnly ? 'Informações de rede' : 'Informações do sistema',
+          style: const TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _infoRow('Versão', info.version),
+            _infoRow('Plataforma', info.platform),
+            if (!networkOnly) _infoRow('Armazenamento', info.diskLabel),
+            _infoRow('Endereço IP', info.ip ?? 'sem rede'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
           ),
-          if (AppDirs.isAndroid || AppDirs.isIOS)
-            SettingsOption(
-              label: 'Travar paisagem',
-              description: 'Mantém a interface sempre na horizontal.',
-              toggle: () => s.getLandscapeLock(),
-              onToggle: (v) {
-                s.setLandscapeLock(v);
-                if (v) {
-                  ScreenMode.lockLandscape();
-                } else {
-                  // Sem preferencia forçada: acompanha o sensor.
-                  SystemChrome.setPreferredOrientations([]);
-                }
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickSystemAndConfigure(BuildContext context) async {
+    List<SystemEntry> systems;
+    try {
+      systems = await _svc.scanner.scanSystems(
+        romsOverride: _svc.settings.getRomsPath(),
+      );
+    } catch (_) {
+      systems = const [];
+    }
+    if (!context.mounted) return;
+    if (systems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nenhum sistema encontrado na biblioteca.'),
+        ),
+      );
+      return;
+    }
+    OptionMenuSheet.show(
+      context,
+      OptionMenuSheet(
+        title: 'Configuração por console',
+        options: [
+          for (final s in systems)
+            MenuOption(
+              label: s.definition.fullName,
+              subtitle: s.definition.name,
+              icon: Icons.videogame_asset,
+              onTap: () {
+                Navigator.of(
+                  context,
+                ).push(consoleRoute(SystemOptionsView(system: s.definition)));
               },
             ),
         ],
       ),
-      SettingsCategory(
-        label: 'Controles',
-        description: 'Comportamento do direcional e da navegação.',
-        icon: Icons.sports_esports_outlined,
-        options: [
-          SettingsOption(
-            label: 'Repetição da navegação',
-            description:
-                'Tempo entre as repetições ao segurar o direcional. '
-                'Valores menores repetem mais rápido.',
-            cycleValues: const [
-              (150, '150 ms'),
-              (300, '300 ms'),
-              (450, '450 ms'),
-              (600, '600 ms'),
-            ],
-            currentIndex: () =>
-                _cycleIndex(const [150, 300, 450, 600], s.getGamepadRepeatMs()),
-            onCycle: (idx) {
-              final ms = const [150, 300, 450, 600][idx];
-              s.setGamepadRepeatMs(ms);
-              _svc.gamepad.setRepeatInterval(Duration(milliseconds: ms));
-            },
-          ),
-          SettingsOption(
-            label: 'Esquema de botões',
-            description:
-                'Padrão usa A=confirmar e B=voltar (Xbox/Sony). '
-                '"Nintendo" troca os dois, como no RetroArch.',
-            cycleValues: const [
-              ('standard', 'Padrão (A/B)'),
-              ('nintendo', 'Nintendo (B/A)'),
-            ],
-            currentIndex: () => _cycleIndex(const [
-              'standard',
-              'nintendo',
-            ], s.getButtonScheme()),
-            onCycle: (idx) {
-              final scheme = const ['standard', 'nintendo'][idx];
-              s.setButtonScheme(scheme);
-              _svc.gamepad.setButtonScheme(scheme);
-            },
-          ),
-        ],
-      ),
-    ];
+    );
   }
 
   int _cycleIndex<T>(List<T> values, T current) {
@@ -766,7 +940,7 @@ class _SettingsViewState extends State<SettingsView>
           ),
           const Spacer(),
           Text(
-            'RetroFront 0.1.0',
+            'RetroFront $kAppVersion',
             style: TextStyle(color: AppTheme.textFaint, fontSize: 12),
           ),
         ],

@@ -36,22 +36,35 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   bool _androidAccess = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
   bool _depsReady = false;
+  DateTime _lastActivity = DateTime.now();
+  bool _screensaverOn = false;
+  Timer? _screensaverTimer;
+  bool _appActive = true;
+
+  bool get _kiosk => _svc.settings.getUiMode() == 'kiosk';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _screensaverTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _checkScreensaver(),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _screensaverTimer?.cancel();
     _gamepadSub?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appActive = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed) _poke();
     // Ao voltar da tela de permissao/configuracoes do Android (o pedido de
     // "All files access" nao bloqueia ate o usuario retornar), re-escaneia.
     if (state == AppLifecycleState.resumed && AndroidStorage.isNeeded) {
@@ -110,6 +123,10 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
 
   void _onGamepad(GamepadAction action) {
     if (!mounted) return;
+    if (_screensaverOn) {
+      _poke();
+      return;
+    }
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     if (!isCurrent) return;
 
@@ -131,6 +148,22 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
       case GamepadAction.back:
       case GamepadAction.select:
         break;
+    }
+  }
+
+  // Registra atividade do usuário e esconde o protetor de tela se ativo.
+  void _poke() {
+    _lastActivity = DateTime.now();
+    if (_screensaverOn) setState(() => _screensaverOn = false);
+  }
+
+  void _checkScreensaver() {
+    if (!_appActive || _screensaverOn) return;
+    final s = _svc.settings;
+    if (!s.getScreensaverEnabled()) return;
+    final idle = DateTime.now().difference(_lastActivity);
+    if (idle >= Duration(minutes: s.getScreensaverDelay())) {
+      setState(() => _screensaverOn = true);
     }
   }
 
@@ -162,17 +195,21 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   }
 
   void _select(int index) {
+    _poke();
     if (index == _selected) return;
     setState(() => _selected = index);
   }
 
   void _openSelected() {
+    _poke();
     if (_systems.isEmpty) return;
     final system = _systems[_selected];
     Navigator.of(context).push(consoleRoute(GamelistView(system: system)));
   }
 
   void _openSettings() {
+    if (_kiosk) return;
+    _poke();
     Navigator.of(context).push(consoleRoute(const SettingsView()));
   }
 
@@ -201,107 +238,115 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
     return Scaffold(
       body: NavFocus(
         callbacks: _callbacks,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CoverBackdrop(
-              color: _systems.isEmpty
-                  ? AppTheme.accent
-                  : AppTheme.systemColor(_systems[_selected].name),
-            ),
-            if (_loading)
-              const Center(
-                child: CircularProgressIndicator(color: AppTheme.accent),
-              )
-            else if (_hasError)
-              _Message(
-                icon: Icons.error_outline,
-                title: 'Erro ao ler a biblioteca',
-                message: 'Não foi possível acessar a pasta de ROMs.',
-                actionLabel: 'Tentar novamente',
-                onAction: _load,
-              )
-            else if (_systems.isEmpty)
-              _Message(
-                icon: Icons.folder_off_outlined,
-                title: 'Nenhum sistema encontrado',
-                message:
-                    'Escolha a pasta onde ficam suas ROMs (uma subpasta '
-                    'por console: nes, snes, psx, gba...) e o app monta a '
-                    'biblioteca.\nNo Android é preciso também conceder acesso '
-                    'aos arquivos para ler a pasta.',
-                actionLabel: 'Escolher pasta de ROMs',
-                actionIcon: Icons.folder_open,
-                onAction: _pickRomsFolder,
-                secondaryLabel: AndroidStorage.isNeeded && !_androidAccess
-                    ? 'Conceder acesso aos arquivos'
-                    : null,
-                secondaryIcon: Icons.perm_media,
-                onSecondaryAction: AndroidStorage.isNeeded && !_androidAccess
-                    ? _grantStorage
-                    : null,
-              )
-            else
-              SafeArea(
-                child: Column(
-                  children: [
-                    _TopBar(onRefresh: _load, onSettings: _openSettings),
-                    Expanded(child: _InfoPanel(system: _systems[_selected])),
-                    SizedBox(
-                      height: carouselH,
-                      child: CoverCarousel(
-                        itemCount: _systems.length,
-                        tileWidth: tileW,
-                        tileHeight: carouselH,
-                        selected: _selected,
-                        onSelect: _select,
-                        itemBuilder: (context, index, selected) {
-                          final system = _systems[index];
-                          return SystemCover(
-                            name: system.name,
-                            fullName: system.fullName,
-                            color: AppTheme.systemColor(system.name),
-                            gameCount: system.gameCount,
-                            showGameCount: _svc.settings.getShowGameCount(),
-                            selected: selected,
-                            onTap: () {
-                              if (selected) {
-                                _openSelected();
-                              } else {
-                                _select(index);
-                              }
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    if (_svc.settings.getShowHints())
-                      HintBar(
-                        hints: [
-                          Hint(
-                            'navegar',
-                            button: _svc.gamepad.currentButtonFor(
-                              GamepadAction.right,
-                            ),
-                          ),
-                          Hint(
-                            'entrar',
-                            button: _svc.gamepad.currentButtonFor(
-                              GamepadAction.confirm,
-                            ),
-                          ),
-                          Hint(
-                            'opções',
-                            button: _svc.gamepad.currentButtonFor(
-                              GamepadAction.start,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
+        child: Listener(
+          onPointerDown: (_) => _poke(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CoverBackdrop(
+                color: _systems.isEmpty
+                    ? AppTheme.accent
+                    : AppTheme.systemColor(_systems[_selected].name),
               ),
-          ],
+              if (_loading)
+                const Center(
+                  child: CircularProgressIndicator(color: AppTheme.accent),
+                )
+              else if (_hasError)
+                _Message(
+                  icon: Icons.error_outline,
+                  title: 'Erro ao ler a biblioteca',
+                  message: 'Não foi possível acessar a pasta de ROMs.',
+                  actionLabel: 'Tentar novamente',
+                  onAction: _load,
+                )
+              else if (_systems.isEmpty)
+                _Message(
+                  icon: Icons.folder_off_outlined,
+                  title: 'Nenhum sistema encontrado',
+                  message:
+                      'Escolha a pasta onde ficam suas ROMs (uma subpasta '
+                      'por console: nes, snes, psx, gba...) e o app monta a '
+                      'biblioteca.\nNo Android é preciso também conceder acesso '
+                      'aos arquivos para ler a pasta.',
+                  actionLabel: 'Escolher pasta de ROMs',
+                  actionIcon: Icons.folder_open,
+                  onAction: _pickRomsFolder,
+                  secondaryLabel: AndroidStorage.isNeeded && !_androidAccess
+                      ? 'Conceder acesso aos arquivos'
+                      : null,
+                  secondaryIcon: Icons.perm_media,
+                  onSecondaryAction: AndroidStorage.isNeeded && !_androidAccess
+                      ? _grantStorage
+                      : null,
+                )
+              else
+                SafeArea(
+                  child: Column(
+                    children: [
+                      _TopBar(
+                        onRefresh: _load,
+                        onSettings: _kiosk ? null : _openSettings,
+                      ),
+                      Expanded(child: _InfoPanel(system: _systems[_selected])),
+                      SizedBox(
+                        height: carouselH,
+                        child: CoverCarousel(
+                          itemCount: _systems.length,
+                          tileWidth: tileW,
+                          tileHeight: carouselH,
+                          selected: _selected,
+                          onSelect: _select,
+                          itemBuilder: (context, index, selected) {
+                            final system = _systems[index];
+                            return SystemCover(
+                              name: system.name,
+                              fullName: system.fullName,
+                              color: AppTheme.systemColor(system.name),
+                              gameCount: system.gameCount,
+                              showGameCount: _svc.settings.getShowGameCount(),
+                              selected: selected,
+                              onTap: () {
+                                if (selected) {
+                                  _openSelected();
+                                } else {
+                                  _select(index);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      if (_svc.settings.getShowHints())
+                        HintBar(
+                          hints: [
+                            Hint(
+                              'navegar',
+                              button: _svc.gamepad.currentButtonFor(
+                                GamepadAction.right,
+                              ),
+                            ),
+                            Hint(
+                              'entrar',
+                              button: _svc.gamepad.currentButtonFor(
+                                GamepadAction.confirm,
+                              ),
+                            ),
+                            if (!_kiosk)
+                              Hint(
+                                'opções',
+                                button: _svc.gamepad.currentButtonFor(
+                                  GamepadAction.start,
+                                ),
+                              ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              if (_screensaverOn) _ScreensaverOverlay(onDismiss: _poke),
+            ],
+          ),
         ),
       ),
     );
@@ -310,9 +355,9 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
 
 class _TopBar extends StatelessWidget {
   final VoidCallback onRefresh;
-  final VoidCallback onSettings;
+  final VoidCallback? onSettings;
 
-  const _TopBar({required this.onRefresh, required this.onSettings});
+  const _TopBar({required this.onRefresh, this.onSettings});
 
   @override
   Widget build(BuildContext context) {
@@ -351,13 +396,84 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.refresh),
             color: Colors.white70,
           ),
-          IconButton(
-            tooltip: 'Configurações',
-            onPressed: onSettings,
-            icon: const Icon(Icons.settings),
-            color: Colors.white70,
-          ),
+          if (onSettings != null)
+            IconButton(
+              tooltip: 'Configurações',
+              onPressed: onSettings,
+              icon: const Icon(Icons.settings),
+              color: Colors.white70,
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// Protetor de tela: fundo escuro com relógio; qualquer toque ou botão volta.
+class _ScreensaverOverlay extends StatefulWidget {
+  final VoidCallback onDismiss;
+
+  const _ScreensaverOverlay({required this.onDismiss});
+
+  @override
+  State<_ScreensaverOverlay> createState() => _ScreensaverOverlayState();
+}
+
+class _ScreensaverOverlayState extends State<_ScreensaverOverlay> {
+  DateTime _now = DateTime.now();
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = _now.hour.toString().padLeft(2, '0');
+    final m = _now.minute.toString().padLeft(2, '0');
+    return GestureDetector(
+      onTap: widget.onDismiss,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: Colors.black,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$h:$m',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 64,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'RetroFront',
+              style: TextStyle(color: Colors.white24, fontSize: 15),
+            ),
+            const SizedBox(height: 44),
+            Text(
+              'Toque ou aperte qualquer botão',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.35),
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
