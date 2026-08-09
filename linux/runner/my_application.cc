@@ -67,6 +67,23 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
+  // Set the window icon so the app uses its own icon in the title bar and task
+  // switcher instead of the default Flutter logo. The icon lives in the bundle's
+  // data/icons/ directory, next to the data/flutter_assets directory.
+  const gchar* assets_path = fl_dart_project_get_assets_path(project);
+  if (assets_path != nullptr) {
+    gchar* data_dir = g_path_get_dirname(assets_path);
+    gchar* icon_path = g_build_filename(
+        data_dir, "icons", "icon.png", nullptr);
+    GdkPixbuf* icon = gdk_pixbuf_new_from_file(icon_path, nullptr);
+    if (icon != nullptr) {
+      gtk_window_set_icon(window, icon);
+      g_object_unref(icon);
+    }
+    g_free(icon_path);
+    g_free(data_dir);
+  }
+
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
   g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
