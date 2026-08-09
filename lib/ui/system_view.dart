@@ -224,11 +224,14 @@ class _SystemViewState extends State<SystemView> {
                       ),
                     ),
                     if (_svc.settings.getShowHints())
-                      const HintBar(
+                      HintBar(
                         hints: [
-                          Hint('◄ ►  navegar'),
-                          Hint('toque/A  entrar'),
-                          Hint('Start  opções'),
+                          Hint('navegar',
+                              button: _svc.gamepad.currentButtonFor(GamepadAction.right)),
+                          Hint('entrar',
+                              button: _svc.gamepad.currentButtonFor(GamepadAction.confirm)),
+                          Hint('opções',
+                              button: _svc.gamepad.currentButtonFor(GamepadAction.start)),
                         ],
                       ),
                   ],

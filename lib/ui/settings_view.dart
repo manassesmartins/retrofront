@@ -739,11 +739,12 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _hints() {
     if (!_svc.settings.getShowHints()) return const SizedBox.shrink();
-    return const HintBar(
+    final gp = _svc.gamepad;
+    return HintBar(
       hints: [
-        Hint('◄ ►  categoria'),
-        Hint('A  abrir'),
-        Hint('B  voltar'),
+        Hint('categoria', button: gp.currentButtonFor(GamepadAction.right)),
+        Hint('abrir', button: gp.currentButtonFor(GamepadAction.confirm)),
+        Hint('voltar', button: gp.currentButtonFor(GamepadAction.back)),
       ],
     );
   }

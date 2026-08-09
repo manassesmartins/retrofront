@@ -223,8 +223,7 @@ class GamepadManager {
   }
 
   /// Botao padrao (esquema 'standard') de uma acao, para exibicao no remap.
-  static GamepadButton? defaultButtonFor(GamepadAction action) {
-    return switch (action) {
+  static GamepadButton? defaultButtonFor(GamepadAction action) {    return switch (action) {
       GamepadAction.confirm => GamepadButton.a,
       GamepadAction.back => GamepadButton.b,
       GamepadAction.start => GamepadButton.start,
@@ -237,6 +236,15 @@ class GamepadManager {
       GamepadAction.left => GamepadButton.dpadLeft,
       GamepadAction.right => GamepadButton.dpadRight,
     };
+  }
+
+  /// Botao atualmente mapeado para uma acao (considera o remap do usuario),
+  /// usado para exibir os atalhos corretos na interface.
+  GamepadButton? currentButtonFor(GamepadAction action) {
+    for (final entry in _buttonOverrides.entries) {
+      if (entry.value == action) return entry.key;
+    }
+    return defaultButtonFor(action);
   }
 
   /// Rótulos amigaveis dos botoes para a tela de mapeamento.

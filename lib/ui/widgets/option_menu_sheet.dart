@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gamepads/gamepads.dart';
 
 import '../../core/app_scope.dart';
 import '../../gamepad/gamepad_manager.dart';
 import '../theme.dart';
+import 'gamepad_button_badge.dart';
 import 'nav_key_handler.dart';
 
 class MenuOption {
@@ -127,12 +129,40 @@ class _OptionMenuSheetState extends State<OptionMenuSheet> {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    '▲▼ + A  escolher',
-                    style: TextStyle(
-                      color: AppTheme.textFaint,
-                      fontSize: 12,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GamepadButtonBadge(
+                        button: GamepadButton.dpadUp,
+                        size: 13,
+                        color: AppTheme.textFaint,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '+',
+                        style: TextStyle(
+                          color: AppTheme.textFaint,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      GamepadButtonBadge(
+                        button: AppScope.of(context)
+                                .gamepad
+                                .currentButtonFor(GamepadAction.confirm) ??
+                            GamepadButton.a,
+                        size: 13,
+                        color: AppTheme.textFaint,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'escolher',
+                        style: TextStyle(
+                          color: AppTheme.textFaint,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

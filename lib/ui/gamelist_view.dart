@@ -460,11 +460,12 @@ class _GamelistViewState extends State<GamelistView> {
 
   Widget _hints() {
     if (!_svc.settings.getShowHints()) return const SizedBox.shrink();
-    return const HintBar(
+    final gp = _svc.gamepad;
+    return HintBar(
       hints: [
-        Hint('▲▼  navegar'),
-        Hint('A / toque na capa  jogar'),
-        Hint('B  voltar'),
+        Hint('navegar', button: gp.currentButtonFor(GamepadAction.up)),
+        Hint('jogar', button: gp.currentButtonFor(GamepadAction.confirm)),
+        Hint('voltar', button: gp.currentButtonFor(GamepadAction.back)),
       ],
     );
   }
