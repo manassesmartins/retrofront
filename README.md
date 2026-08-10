@@ -113,29 +113,6 @@ flutter build apk --target-platform android-arm
 flutter build apk --release
 ```
 
-### Assinatura do APK
-
-Para assinar o release com uma chave própria (necessária para distribuir o APK):
-
-```bash
-keytool -genkeypair -v -keystore android/app/upload-keystore.jks -alias upload \
-  -keyalg RSA -keysize 2048 -validity 10000 -storepass SUA_SENHA -keypass SUA_SENHA \
-  -dname "CN=RetroFront, OU=Retro, O=RetroFront, L=SP, ST=SP, C=BR"
-```
-
-Depois crie `android/key.properties`:
-
-```
-storePassword=SUA_SENHA
-keyPassword=SUA_SENHA
-keyAlias=upload
-storeFile=upload-keystore.jks
-```
-
-O Gradle usa essa configuração automaticamente no `flutter build apk --release`.
-Sem o `key.properties`, o release é assinado com a chave de debug (só para testes).
-O arquivo `key.properties` e o `*.jks` já estão no `.gitignore`.
-
 ### Auto-versionamento e Releases (GitHub Actions)
 
 O projeto usa auto-versionamento Nightly/Beta/Stable via GitHub Actions:
