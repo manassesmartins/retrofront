@@ -10,9 +10,7 @@ Bluetooth. Código novo, sem derivar do ES-DE (inspirado na arquitetura).
 | Plataforma | Build |
 |---|---|
 | Linux (desktop) | `flutter build linux` |
-| Windows (desktop) | `flutter build windows` |
 | Android (ARMv7a/ARM64/x86_64) | `flutter build apk --target-platform android-arm` |
-| iOS | `flutter build ios` |
 
 ## Como funciona
 
@@ -51,15 +49,12 @@ Bluetooth. Código novo, sem derivar do ES-DE (inspirado na arquitetura).
 Localização do `<ROMs>`:
 
 - **Linux:** `~/ROMs`
-- **Windows:** `C:\Users\<usuário>\ROMs`
 - **Android:** `/storage/emulated/0/ROMs` (ou o diretório externo do app)
-- **iOS:** `Documents/ROMs` (compartilhável via Arquivos/iTunes)
 
 Localização do `<AppData>`:
 
 - **Linux:** `~/.local/share/<app>/RetroFront`
-- **Windows:** `%APPDATA%/<app>/RetroFront`
-- **Android / iOS:** diretório de dados do app
+- **Android:** diretório de dados do app
 
 > Dica: defina a variável de ambiente `RETROFRONT_ROMS_ROOT` (ou use a opção
 > nas Configurações) para usar uma biblioteca externa — ex.: um HD com ROMs.
@@ -111,17 +106,11 @@ flutter pub get
 # Linux (release)
 ./build_linux.sh release
 
-# Windows (no Windows)
-flutter build windows
-
 # Android ARMv7a (ex.: consoles portáteis / emuladores com telas)
 flutter build apk --target-platform android-arm
 
 # Android completo (release)
 flutter build apk --release
-
-# iOS (no macOS)
-flutter build ios
 ```
 
 ### Assinatura do APK
@@ -146,6 +135,31 @@ storeFile=upload-keystore.jks
 O Gradle usa essa configuração automaticamente no `flutter build apk --release`.
 Sem o `key.properties`, o release é assinado com a chave de debug (só para testes).
 O arquivo `key.properties` e o `*.jks` já estão no `.gitignore`.
+
+### Auto-versionamento e Releases (GitHub Actions)
+
+O projeto usa auto-versionamento Nightly/Beta/Stable via GitHub Actions:
+
+- **A cada 10 commits** na `main`, o workflow `release.yml` gera automaticamente
+  uma **pré-release** `v1.0.<commits>-beta` (ex.: `v1.0.20-beta`) com o APK e o
+  bundle Linux, marcada como `pre-release` no GitHub.
+- **Release estável** (ex.: `v1.1.0`) é criada manualmente: **Actions →
+  Release → Run workflow** informando a versão desejada.
+- A versão é injetada no Gradle via variáveis de ambiente
+  (`ANDROID_VERSION_CODE` e `ANDROID_VERSION_NAME`); localmente, sem as
+  variáveis, usa a versão do `pubspec.yaml`.
+
+### Auto-update (in-app)
+
+O app consulta as releases do GitHub (`github.com/manassesmartins/retrofront`):
+
+- **Configurações → Sistema → Atualizações**: verifica a versão mais recente,
+  exibe o changelog e, no Android, baixa e instala o APK (botão
+  "Baixar e instalar"). No Linux abre a página de releases.
+- **Verificar atualizações ao iniciar**: consulta o GitHub quando o app abre e
+  avisa se houver versão nova (SnackBar).
+- **Incluir versões pré-lançamento**: considera releases beta/nightly na
+  verificação.
 
 Testes e análise estática:
 

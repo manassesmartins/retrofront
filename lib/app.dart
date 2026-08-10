@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/app_scope.dart';
+import 'core/route_observer.dart';
 import 'gamepad/gamepad_manager.dart';
 import 'ui/system_view.dart';
 import 'ui/theme.dart';
@@ -72,6 +73,7 @@ class _RetroFrontAppState extends State<RetroFrontApp> {
               return MaterialApp(
                 title: 'RetroFront',
                 debugShowCheckedModeBanner: false,
+                navigatorObservers: [routeObserver],
                 theme: AppTheme.dark(),
                 themeMode: dark ? ThemeMode.dark : ThemeMode.light,
                 home: const SystemView(),

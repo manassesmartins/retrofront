@@ -44,6 +44,7 @@ dependencies:
   gamepads: ^0.1.10+5
   file_picker: ^11.0.3
   permission_handler: ^13.0.0
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +72,7 @@ flutter:
 
   assets:
     - assets/systems/es_systems.json
+    - assets/systems/logos/
 
 flutter_launcher_icons:
   android: true

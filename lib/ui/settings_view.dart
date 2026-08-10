@@ -9,7 +9,9 @@ import '../core/app_dirs.dart';
 import '../core/app_languages.dart';
 import '../core/app_scope.dart';
 import '../core/device_info.dart';
+import '../core/route_observer.dart';
 import '../core/screen_mode.dart';
+import '../core/update_checker.dart';
 import '../gamepad/gamepad_manager.dart';
 import '../models/system.dart';
 import 'settings_category_view.dart';
@@ -40,7 +42,7 @@ class SettingsView extends StatefulWidget {
 }
 
 class _SettingsViewState extends State<SettingsView>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   AppServices get _svc => AppScope.of(context);
 
   List<SettingsCategory> _categories = [];
@@ -51,7 +53,9 @@ class _SettingsViewState extends State<SettingsView>
   bool _androidAccess = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
   bool _depsReady = false;
+  bool _routeSubscribed = false;
   DeviceInfo? _deviceInfo;
+  String? _latestVersion;
 
   @override
   void initState() {
@@ -62,6 +66,7 @@ class _SettingsViewState extends State<SettingsView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    routeObserver.unsubscribe(this);
     _gamepadSub?.cancel();
     super.dispose();
   }
@@ -77,10 +82,21 @@ class _SettingsViewState extends State<SettingsView>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_routeSubscribed) {
+      _routeSubscribed = true;
+      routeObserver.subscribe(this, ModalRoute.of(context)!);
+    }
     if (_depsReady) return;
     _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _load();
+  }
+
+  // Voltou de uma subcategoria: re-reflete os valores das opções.
+  @override
+  void didPopNext() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _load() async {
@@ -130,6 +146,29 @@ class _SettingsViewState extends State<SettingsView>
                 'Versão do app, espaço em disco e endereço IP da rede.',
             display: () => _deviceInfo?.ip ?? 'versão, disco e IP',
             onConfirm: (ctx) => _showSystemInfo(ctx),
+          ),
+          SettingsOption(
+            label: 'Atualizações',
+            description:
+                'Verifica novas versões do RetroFront no GitHub, baixa '
+                'o APK e instala no dispositivo.',
+            display: () => _latestVersion ?? 'verificar no GitHub',
+            onConfirm: (ctx) => _showUpdateDialog(ctx),
+          ),
+          SettingsOption(
+            label: 'Verificar atualizações ao iniciar',
+            description:
+                'Consulta o GitHub por novas versões quando o app abre.',
+            toggle: () => s.getCheckUpdates(),
+            onToggle: (v) => s.setCheckUpdates(v),
+          ),
+          SettingsOption(
+            label: 'Incluir versões pré-lançamento',
+            description:
+                'Considera releases beta/nightly na verificação '
+                'de atualização.',
+            toggle: () => s.getIncludePrerelease(),
+            onToggle: (v) => s.setIncludePrerelease(v),
           ),
           SettingsOption(
             label: 'Pasta de ROMs',
@@ -247,7 +286,15 @@ class _SettingsViewState extends State<SettingsView>
             cycleValues: const [('full', 'Completo'), ('kiosk', 'Quiosque')],
             currentIndex: () =>
                 _cycleIndex(const ['full', 'kiosk'], s.getUiMode()),
-            onCycle: (idx) => s.setUiMode(const ['full', 'kiosk'][idx]),
+            onCycle: (idx) async {
+              final mode = const ['full', 'kiosk'][idx];
+              if (mode == 'kiosk') {
+                final ok = await _confirmEnableKiosk();
+                if (!ok) return;
+              }
+              await s.setUiMode(mode);
+              if (mounted) setState(() {});
+            },
           ),
           SettingsOption(
             label: 'Protetor de tela',
@@ -291,7 +338,7 @@ class _SettingsViewState extends State<SettingsView>
               ScreenMode.setFullscreen(v);
             },
           ),
-          if (AppDirs.isAndroid || AppDirs.isIOS)
+          if (AppDirs.isAndroid)
             SettingsOption(
               label: 'Travar paisagem',
               description: 'Mantém a interface sempre na horizontal.',
@@ -372,12 +419,12 @@ class _SettingsViewState extends State<SettingsView>
             'Detecção do RetroArch instalado e opções de inicialização.',
         icon: Icons.memory,
         options: [
-          if (AppDirs.isAndroid || AppDirs.isIOS)
+          if (AppDirs.isAndroid)
             SettingsOption(
               label: 'RetroArch detectado',
               description:
                   'O app procura o RetroArch instalado em qualquer '
-                  'versão do Android/iOS automaticamente. Use A para '
+                  'versão do Android automaticamente. Use A para '
                   'verificar novamente.',
               display: () => _retroArch ?? 'não instalado',
               onConfirm: (ctx) async {
@@ -706,6 +753,22 @@ class _SettingsViewState extends State<SettingsView>
     );
   }
 
+  /// Abre a janela de atualização: consulta o GitHub, mostra a versão mais
+  /// recente e permite baixar/instalar o APK (Android) ou abrir a página
+  /// de releases.
+  Future<void> _showUpdateDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _UpdateDialog(
+        service: _svc.update,
+        includePrerelease: _svc.settings.getIncludePrerelease(),
+        onDetected: (v) {
+          if (mounted && v != null) setState(() => _latestVersion = v);
+        },
+      ),
+    );
+  }
+
   Widget _infoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -770,6 +833,39 @@ class _SettingsViewState extends State<SettingsView>
   int _cycleIndex<T>(List<T> values, T current) {
     final i = values.indexOf(current);
     return i < 0 ? 0 : i;
+  }
+
+  // Evita ativar o modo quiosque por engano: sem confirmação, o botão de
+  // configurações some e o usuário pode ficar preso.
+  Future<bool> _confirmEnableKiosk() async {
+    if (!mounted) return false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text(
+          'Ativar modo quiosque?',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: const Text(
+          'No modo quiosque o botão de configurações fica oculto. '
+          'Você ainda pode sair pressionando Start/Home (ou tocando o '
+          'logo) na tela inicial.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ativar'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
   }
 
   Color _categoryColor(int index) {
@@ -1092,6 +1188,288 @@ class _CategoryCover extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Janela de atualização: consulta o GitHub, exibe a versão disponível e
+/// permite baixar/instalar o APK (Android) ou abrir a página de releases.
+class _UpdateDialog extends StatefulWidget {
+  final UpdateService service;
+  final bool includePrerelease;
+  final ValueChanged<String?> onDetected;
+
+  const _UpdateDialog({
+    required this.service,
+    required this.includePrerelease,
+    required this.onDetected,
+  });
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  UpdateResult? _result;
+  bool _downloading = false;
+  double _progress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    setState(() {
+      _result = null;
+      _downloading = false;
+      _progress = 0;
+    });
+    final result = await widget.service.check(
+      includePrerelease: widget.includePrerelease,
+    );
+    if (!mounted) return;
+    setState(() => _result = result);
+    widget.onDetected(result.latest?.version);
+  }
+
+  Future<void> _downloadAndInstall() async {
+    final latest = _result?.latest;
+    final url = latest?.apkUrl;
+    if (latest == null || url == null) return;
+    setState(() {
+      _downloading = true;
+      _progress = 0;
+    });
+    final path = await widget.service.downloadApk(
+      url,
+      onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      },
+    );
+    if (!mounted) return;
+    if (path == null) {
+      setState(() => _downloading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Falha ao baixar o APK.')),
+      );
+      return;
+    }
+    final ok = await widget.service.installApk(path);
+    if (!mounted) return;
+    setState(() => _downloading = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível abrir o instalador.'),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: const Text(
+        'Atualizações',
+        style: TextStyle(color: AppTheme.textPrimary),
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 360),
+        child: _buildContent(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Fechar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    final result = _result;
+    if (result == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.accent),
+      );
+    }    if (_downloading) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Baixando atualização...',
+            style: TextStyle(color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 14),
+          LinearProgressIndicator(
+            value: _progress,
+            backgroundColor: Colors.white12,
+            valueColor: const AlwaysStoppedAnimation(AppTheme.accent),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${(_progress * 100).round()}%',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Depois do download, o instalador do Android será aberto '
+            'para concluir a instalação.',
+            style: TextStyle(color: AppTheme.textFaint, fontSize: 12),
+          ),
+        ],
+      );
+    }
+
+    final latest = result.latest;
+    if (latest == null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            result.error == null ? Icons.cloud_done : Icons.cloud_off,
+            size: 48,
+            color: AppTheme.textSecondary,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Não foi possível verificar atualizações.',
+            style: TextStyle(color: AppTheme.textPrimary),
+            textAlign: TextAlign.center,
+          ),
+          if (result.error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              result.error!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppTheme.textFaint, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 14),
+          FilledButton.tonalIcon(
+            onPressed: _check,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Tentar novamente'),
+          ),
+        ],
+      );
+    }
+
+    final hasUpdate = result.hasUpdate;
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _infoRow('Versão atual', result.currentVersion),
+          _infoRow(
+            'Mais recente',
+            '${latest.version}${latest.isPrerelease ? ' (beta)' : ''}',
+          ),
+          if (hasUpdate) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.system_update_alt,
+                      color: AppTheme.accent, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Nova versão disponível!',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (latest.body.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                latest.body,
+                maxLines: 8,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            if (AppDirs.isAndroid && latest.apkUrl != null)
+              FilledButton.icon(
+                onPressed: _downloadAndInstall,
+                icon: const Icon(Icons.download),
+                label: const Text('Baixar e instalar'),
+              )
+            else
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white38),
+                ),
+                onPressed: () => widget.service.openReleasesPage(),
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Ver no GitHub'),
+              ),
+          ] else ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Você já está na versão mais recente.',
+              style: TextStyle(color: AppTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white38),
+              ),
+              onPressed: () => widget.service.openReleasesPage(),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Ver no GitHub'),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -189,9 +189,7 @@ class LaunchService {
   /// Detecta o RetroArch instalado automaticamente:
   ///   - override configurado pelo usuario tem prioridade;
   ///   - Android: pacote do RetroArch via PackageManager (qualquer versao);
-  ///   - Windows: pastas comuns de instalacao + Steam + `where retroarch`;
-  ///   - Linux: PATH, /usr, ~/.local, snap e exports do Flatpak;
-  ///   - macOS: .app, Homebrew e `which retroarch`.
+  ///   - Linux: PATH, /usr, ~/.local, snap e exports do Flatpak.
   /// Retorna o caminho do executavel (desktop) ou o nome do pacote (Android).
   Future<String?> findRetroArch() async {
     final override = settings.getRetroArchPath();
@@ -203,22 +201,7 @@ class LaunchService {
     if (Platform.isAndroid) {
       return _androidRetroArchPackage();
     }
-    if (Platform.isIOS) return null;
 
-    if (Platform.isWindows) {
-      for (final c in _windowsCandidates) {
-        if (File(c).existsSync()) return c;
-      }
-      return _which('retroarch');
-    }
-    if (Platform.isMacOS) {
-      for (final c in _macCandidates) {
-        if (File(c).existsSync()) return c;
-      }
-      return _which('retroarch');
-    }
-
-    // Linux e demais desktops.
     for (final c in _linuxCandidates) {
       if (File(c).existsSync()) return c;
     }
@@ -233,36 +216,6 @@ class LaunchService {
     } catch (_) {
       return null;
     }
-  }
-
-  List<String> get _windowsCandidates {
-    String env(String key) => Platform.environment[key] ?? '';
-    final local = env('LOCALAPPDATA');
-    final pf = env('PROGRAMFILES');
-    final pf86 = env('PROGRAMFILES(X86)');
-    return [
-      if (local.isNotEmpty) '$local\\RetroArch\\retroarch.exe',
-      if (pf.isNotEmpty) '$pf\\RetroArch\\retroarch.exe',
-      if (pf.isNotEmpty) '$pf\\RetroArch-Win64\\retroarch.exe',
-      if (pf86.isNotEmpty) '$pf86\\RetroArch\\retroarch.exe',
-      if (pf86.isNotEmpty)
-        '$pf86\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
-      if (pf.isNotEmpty)
-        '$pf\\Steam\\steamapps\\common\\RetroArch\\retroarch.exe',
-      r'C:\RetroArch-Win64\retroarch.exe',
-      r'C:\RetroArch\retroarch.exe',
-    ];
-  }
-
-  List<String> get _macCandidates {
-    final home = Platform.environment['HOME'] ?? '';
-    return [
-      '/Applications/RetroArch.app/Contents/MacOS/RetroArch',
-      if (home.isNotEmpty)
-        '$home/Applications/RetroArch.app/Contents/MacOS/RetroArch',
-      '/opt/homebrew/bin/retroarch',
-      '/usr/local/bin/retroarch',
-    ];
   }
 
   List<String> get _linuxCandidates {
@@ -300,7 +253,7 @@ class LaunchService {
       return '/app/lib/retroarch/cores';
     }
     final dir = File(exe).parent.path;
-    return '$dir${Platform.isWindows ? r'\cores' : '/cores'}';
+    return '$dir/cores';
   }
 
   /// Se [exe] e um launcher do Flatpak (ex.: ~/.local/share/flatpak/exports/
@@ -317,9 +270,7 @@ class LaunchService {
 
   Future<String?> _which(String name) async {
     try {
-      final result = await Process.run(Platform.isWindows ? 'where' : 'which', [
-        name,
-      ]);
+      final result = await Process.run('which', [name]);
       if (result.exitCode == 0) {
         final line = result.stdout.toString().trim().split('\n').first;
         if (line.isNotEmpty) return line;

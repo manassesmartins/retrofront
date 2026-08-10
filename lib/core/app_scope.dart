@@ -12,6 +12,7 @@ import '../data/scraping/thegamesdb_provider.dart';
 import '../data/settings/settings_service.dart';
 import '../data/systems/system_definitions_repository.dart';
 import '../gamepad/gamepad_manager.dart';
+import 'update_checker.dart';
 
 /// Agrupamento dos servicos do aplicativo (injetados via AppScope).
 class AppServices {
@@ -22,6 +23,7 @@ class AppServices {
   final ScrapeService scrape;
   final LaunchService launcher;
   final GamepadManager gamepad;
+  final UpdateService update;
   final ValueNotifier<bool> darkMode;
 
   AppServices({
@@ -32,6 +34,7 @@ class AppServices {
     required this.scrape,
     required this.launcher,
     required this.gamepad,
+    required this.update,
     required this.darkMode,
   });
 
@@ -84,6 +87,7 @@ class AppServices {
       scrape: scrape,
       launcher: launcher,
       gamepad: gamepad,
+      update: UpdateService(),
       darkMode: ValueNotifier<bool>(settings.getDarkMode()),
     );
   }

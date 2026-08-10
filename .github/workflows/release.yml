@@ -1,0 +1,104 @@
+name: Release
+
+# Auto-versionamento e releases:
+#  - A cada 10 commits acumulados na main, gera automaticamente uma
+#    pré-release (Nightly/Beta) com o APK, ex.: v1.0.20-beta.
+#  - Releases estáveis (ex.: v1.1.0) só são criadas manualmente via
+#    "Run workflow" informando a versão desejada.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stable_version:
+        description: 'Versão estável (ex.: 1.1.0). Vazio = pré-lançamento automático.'
+        required: false
+        default: ''
+
+jobs:
+  release:
+    name: Build e release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Calcular versão
+        id: version
+        run: |
+          STABLE="${{ github.event.inputs.stable_version }}"
+          COMMITS=$(git rev-list --count HEAD)
+
+          if [ -n "$STABLE" ]; then
+            # Release estável solicitada manualmente.
+            echo "version_name=$STABLE"            >> "$GITHUB_OUTPUT"
+            echo "version_code=$COMMITS"           >> "$GITHUB_OUTPUT"
+            echo "tag=v$STABLE"                    >> "$GITHUB_OUTPUT"
+            echo "prerelease=false"                >> "$GITHUB_OUTPUT"
+            echo "should_release=true"             >> "$GITHUB_OUTPUT"
+          elif [ $((COMMITS % 10)) -eq 0 ]; then
+            # A cada 10 commits: pré-release Nightly/Beta.
+            echo "version_name=1.0.${COMMITS}-beta" >> "$GITHUB_OUTPUT"
+            echo "version_code=$COMMITS"           >> "$GITHUB_OUTPUT"
+            echo "tag=v1.0.${COMMITS}-beta"        >> "$GITHUB_OUTPUT"
+            echo "prerelease=true"                 >> "$GITHUB_OUTPUT"
+            echo "should_release=true"             >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false"            >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Baixar dependências
+        if: steps.version.outputs.should_release == 'true'
+        run: flutter pub get
+
+      - name: Instalar dependências do GTK (Linux)
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libsecret-1-dev
+
+      - name: Build APK (release)
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          ANDROID_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          ANDROID_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: flutter build apk --release
+
+      - name: Build Linux (release)
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          flutter build linux --release
+          tar -C build/linux/x64/release -czf retrofront-linux.tar.gz bundle
+
+      - name: Criar release no GitHub
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          NAME: ${{ steps.version.outputs.version_name }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          # Não recria a release se a tag já existir (ex.: re-run do workflow).
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG já existe; ignorando."
+            exit 0
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            NOTES="Build automático (auto-versionamento). A cada 10 alterações na main uma nova pré-release é gerada."
+          else
+            NOTES="Release estável do RetroFront."
+          fi
+          gh release create "$TAG" "$APK" retrofront-linux.tar.gz \
+            --title "RetroFront $NAME" \
+            --notes "$NOTES" \
+            --prerelease="$PRERELEASE"

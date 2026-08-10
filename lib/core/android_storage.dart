@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 /// Acesso amplo ao armazenamento no Android (pastas publicas como
@@ -13,7 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 ///    conta como "concedido" nesta versao.
 ///  - Android <= 10: basta a permissao de leitura/escrita em tempo de execucao.
 class AndroidStorage {
-  static bool get isNeeded => !kIsWeb && Platform.isAndroid;
+  static bool get isNeeded => Platform.isAndroid;
 
   static bool get _isAndroid11Plus {
     if (!isNeeded) return false;

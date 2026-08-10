@@ -30,8 +30,13 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+
+        // Versao injetada pelo CI (auto-versionamento Nightly/Beta/Stable).
+        // No build local sem as variaveis, usa a versao do pubspec.yaml.
+        val envVersionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull()
+        val envVersionName = System.getenv("ANDROID_VERSION_NAME")
+        versionCode = envVersionCode ?: flutter.versionCode
+        versionName = envVersionName ?: flutter.versionName
 
         // Suporte a processadores de 32 bits (ARMv7a) alem de 64 bits.
         ndk {

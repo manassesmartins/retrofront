@@ -36,6 +36,8 @@ class SettingsService {
   static const _kScreensaverEnabled = 'screensaver_enabled';
   static const _kScreensaverDelay = 'screensaver_delay';
   static const _kNavSounds = 'nav_sounds';
+  static const _kCheckUpdates = 'check_updates';
+  static const _kIncludePrerelease = 'include_prerelease';
 
   static const _allowList = {
     _kRomsPath,
@@ -67,6 +69,8 @@ class SettingsService {
     _kScreensaverEnabled,
     _kScreensaverDelay,
     _kNavSounds,
+    _kCheckUpdates,
+    _kIncludePrerelease,
   };
 
   SharedPreferencesWithCache? _prefs;
@@ -282,4 +286,16 @@ class SettingsService {
   bool getNavSounds() => _p.getBool(_kNavSounds) ?? true;
 
   Future<void> setNavSounds(bool value) => _p.setBool(_kNavSounds, value);
+
+  /// Auto-update: verifica novas releases do GitHub ao iniciar o app.
+  bool getCheckUpdates() => _p.getBool(_kCheckUpdates) ?? true;
+
+  Future<void> setCheckUpdates(bool value) =>
+      _p.setBool(_kCheckUpdates, value);
+
+  /// Auto-update: inclui pre-releases (Nightly/Beta) na verificacao.
+  bool getIncludePrerelease() => _p.getBool(_kIncludePrerelease) ?? false;
+
+  Future<void> setIncludePrerelease(bool value) =>
+      _p.setBool(_kIncludePrerelease, value);
 }

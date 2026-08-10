@@ -65,9 +65,6 @@ Future<DeviceInfo> collectDeviceInfo() async {
 
 String get _platformName {
   if (Platform.isAndroid) return 'Android';
-  if (Platform.isIOS) return 'iOS';
-  if (Platform.isWindows) return 'Windows';
-  if (Platform.isMacOS) return 'macOS';
   if (Platform.isLinux) return 'Linux';
   return 'Desconhecido';
 }

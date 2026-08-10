@@ -1,19 +1,16 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Resolucao de diretorios importantes por plataforma.
-///  - ROMs:  Windows -> C:\Users\<user>\ROMs | Linux -> ~/ROMs | Android -> /storage/emulated/0/ROMs (se acessivel) | iOS -> Documents/ROMs
+///  - ROMs:  Linux -> ~/ROMs | Android -> /storage/emulated/0/ROMs (se acessivel)
 ///  - AppData: diretorio de suporte do aplicativo (gamelists, mídia baixada, cache, custom_systems).
 class AppDirs {
   AppDirs._();
 
-  static bool get isAndroid => !kIsWeb && Platform.isAndroid;
-  static bool get isIOS => !kIsWeb && Platform.isIOS;
-  static bool get isDesktop =>
-      !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+  static bool get isAndroid => Platform.isAndroid;
+  static bool get isDesktop => Platform.isLinux;
 
   static Future<Directory> appDataDir() async {
     final base = await getApplicationSupportDirectory();
@@ -42,16 +39,6 @@ class AppDirs {
       final d = Directory(publicRoms);
       if (!await d.exists()) await d.create(recursive: true);
       return d;
-    }
-    if (isIOS) {
-      final doc = await getApplicationDocumentsDirectory();
-      final d = Directory(p.join(doc.path, 'ROMs'));
-      await d.create(recursive: true);
-      return d;
-    }
-    if (Platform.isWindows) {
-      final profile = Platform.environment['USERPROFILE'] ?? '';
-      return Directory(p.join(profile, 'ROMs'));
     }
     final home = Platform.environment['HOME'] ?? '';
     return Directory(p.join(home, 'ROMs'));

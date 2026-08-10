@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../core/android_storage.dart';
 import '../core/app_scope.dart';
+import '../core/route_observer.dart';
 import '../gamepad/gamepad_manager.dart';
 import '../models/system.dart';
 import 'gamelist_view.dart';
@@ -26,7 +27,8 @@ class SystemView extends StatefulWidget {
   State<SystemView> createState() => _SystemViewState();
 }
 
-class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
+class _SystemViewState extends State<SystemView>
+    with WidgetsBindingObserver, RouteAware {
   AppServices get _svc => AppScope.of(context);
 
   List<SystemEntry> _systems = [];
@@ -36,6 +38,8 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   bool _androidAccess = true;
   StreamSubscription<GamepadAction>? _gamepadSub;
   bool _depsReady = false;
+  bool _routeSubscribed = false;
+  bool _updateChecked = false;
   DateTime _lastActivity = DateTime.now();
   bool _screensaverOn = false;
   Timer? _screensaverTimer;
@@ -56,6 +60,7 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    routeObserver.unsubscribe(this);
     _screensaverTimer?.cancel();
     _gamepadSub?.cancel();
     super.dispose();
@@ -75,10 +80,49 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_routeSubscribed) {
+      _routeSubscribed = true;
+      routeObserver.subscribe(this, ModalRoute.of(context)!);
+    }
     if (_depsReady) return;
     _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _load();
+    if (!_updateChecked) {
+      _updateChecked = true;
+      _checkForUpdatesOnStart();
+    }
+  }
+
+  // Auto-update: verifica o GitHub uma vez por sessão e avisa se houver
+  // versão mais recente (Nightly/Beta/Stable conforme as configurações).
+  Future<void> _checkForUpdatesOnStart() async {
+    final s = _svc.settings;
+    if (!s.getCheckUpdates()) return;
+    final result = await _svc.update.check(
+      includePrerelease: s.getIncludePrerelease(),
+    );
+    if (!mounted || !result.hasUpdate || result.latest == null) return;
+    final latest = result.latest!;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Nova versão ${latest.version} disponível.'),
+          action: SnackBarAction(
+            label: 'Atualizar',
+            onPressed: _openSettings,
+          ),
+        ),
+      );
+  }
+
+  // Voltou ao topo (ex.: fechou Configurações): re-reflete as configurações,
+  // incluindo a visibilidade do botão de configurações no modo quiosque.
+  @override
+  void didPopNext() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _load() async {
@@ -208,8 +252,47 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
   }
 
   void _openSettings() {
-    if (_kiosk) return;
     _poke();
+    if (_kiosk) {
+      _confirmExitKiosk();
+      return;
+    }
+    Navigator.of(context).push(consoleRoute(const SettingsView()));
+  }
+
+  // No modo quiosque as configurações ficam ocultas; exige confirmação para
+  // evitar que o usuário fique preso sem acesso às configurações.
+  Future<void> _confirmExitKiosk() async {
+    if (!mounted) return;
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text(
+          'Modo quiosque',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: const Text(
+          'As configurações estão ocultas no modo quiosque. '
+          'Deseja sair do modo quiosque e abrir as configurações?',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sair e abrir'),
+          ),
+        ],
+      ),
+    );
+    if (exit != true || !mounted) return;
+    await _svc.settings.setUiMode('full');
+    if (!mounted) return;
+    setState(() {});
     Navigator.of(context).push(consoleRoute(const SettingsView()));
   }
 
@@ -233,7 +316,7 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
       140.0,
       isLandscape ? 300.0 : 220.0,
     );
-    final tileW = (carouselH * 0.72).clamp(0.0, 250.0);
+    final tileW = (carouselH * 1.0).clamp(0.0, 300.0);
 
     return Scaffold(
       body: NavFocus(
@@ -287,8 +370,8 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
                       _TopBar(
                         onRefresh: _load,
                         onSettings: _kiosk ? null : _openSettings,
+                        onLogoTap: _kiosk ? _confirmExitKiosk : null,
                       ),
-                      Expanded(child: _InfoPanel(system: _systems[_selected])),
                       SizedBox(
                         height: carouselH,
                         child: CoverCarousel(
@@ -315,6 +398,14 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
                               },
                             );
                           },
+                        ),
+                      ),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _SystemInfoBar(
+                            system: _systems[_selected],
+                          ),
                         ),
                       ),
                       if (_svc.settings.getShowHints())
@@ -356,8 +447,9 @@ class _SystemViewState extends State<SystemView> with WidgetsBindingObserver {
 class _TopBar extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback? onSettings;
+  final VoidCallback? onLogoTap;
 
-  const _TopBar({required this.onRefresh, this.onSettings});
+  const _TopBar({required this.onRefresh, this.onSettings, this.onLogoTap});
 
   @override
   Widget build(BuildContext context) {
@@ -365,18 +457,21 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppTheme.accent, AppTheme.accentAlt],
+          GestureDetector(
+            onTap: onLogoTap,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.accent, AppTheme.accentAlt],
+                ),
+                borderRadius: BorderRadius.circular(12),
               ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.sports_esports,
-              color: Colors.white,
-              size: 22,
+              child: const Icon(
+                Icons.sports_esports,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -479,100 +574,73 @@ class _ScreensaverOverlayState extends State<_ScreensaverOverlay> {
   }
 }
 
-class _InfoPanel extends StatelessWidget {
+/// Painel compacto no rodapé com pequenas informações do console selecionado
+/// (plataforma, fabricante, ano e quantidade de jogos).
+class _SystemInfoBar extends StatelessWidget {
   final SystemEntry system;
 
-  const _InfoPanel({required this.system});
+  const _SystemInfoBar({required this.system});
 
   @override
   Widget build(BuildContext context) {
     final def = system.definition;
-    final isLandscape =
-        MediaQuery.of(context).size.width > MediaQuery.of(context).size.height;
     final showCount = AppScope.of(context).settings.getShowGameCount();
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, isLandscape ? 8 : 12, 24, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              switchInCurve: Curves.easeOut,
-              child: Text(
-                system.fullName,
-                key: ValueKey(system.name),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: isLandscape ? 52 : 34,
-                  fontWeight: FontWeight.w800,
-                  height: 1.05,
-                  letterSpacing: -0.5,
-                ),
-              ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          if (def.platform != null && def.platform!.isNotEmpty)
+            _InfoChip(icon: Icons.memory, label: def.platform!),
+          if (def.manufacturer.isNotEmpty)
+            _InfoChip(icon: Icons.business, label: def.manufacturer),
+          if (def.releaseYear != null)
+            _InfoChip(icon: Icons.event, label: '${def.releaseYear}'),
+          if (showCount)
+            _InfoChip(
+              icon: Icons.videogame_asset,
+              label:
+                  '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
             ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (def.manufacturer.isNotEmpty) ...[
-                  _MetaText(def.manufacturer),
-                  const _Dot(),
-                ],
-                if (def.releaseYear != null) ...[
-                  _MetaText('${def.releaseYear}'),
-                  const _Dot(),
-                ],
-                if (showCount)
-                  _MetaText(
-                    '${system.gameCount} ${system.gameCount == 1 ? 'jogo' : 'jogos'}',
-                  ),
-              ],
-            ),
-            if (!isLandscape) const SizedBox(height: 6),
-            const Text(
-              'Selecione um console e aperte para explorar sua biblioteca.',
-              style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
-class _MetaText extends StatelessWidget {
-  final String text;
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
 
-  const _MetaText(this.text);
+  const _InfoChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: AppTheme.textSecondary,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(20),
       ),
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  const _Dot();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 10),
-      child: Text('•', style: TextStyle(color: AppTheme.accent, fontSize: 14)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.white70),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

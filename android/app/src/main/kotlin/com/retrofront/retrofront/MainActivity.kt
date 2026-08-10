@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.hardware.input.InputManager
+import android.net.Uri
 import android.os.Handler
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -45,6 +46,22 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
             when (call.method) {
                 "getStorage" -> {
                     result.success(storageInfo())
+                }
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "retrofront/update"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "installApk" -> {
+                    val path = call.arguments as? String ?: ""
+                    result.success(installApk(path))
+                }
+                "openUrl" -> {
+                    val url = call.arguments as? String ?: ""
+                    result.success(openUrl(url))
                 }
                 else -> result.notImplemented()
             }
@@ -129,6 +146,45 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
             } catch (e2: Exception) {
                 false
             }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Baixa o APK via FileProvider e abre o instalador do Android. */
+    private fun installApk(apkPath: String): Boolean {
+        val context = applicationContext
+        val file = File(apkPath)
+        if (!file.exists()) return false
+
+        val uri = try {
+            FileProvider.getUriForFile(
+                context,
+                "$packageName.fileprovider",
+                file
+            )
+        } catch (e: Exception) {
+            return false
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Abre uma URL no navegador do sistema (ex.: pagina de releases do GitHub). */
+    private fun openUrl(url: String): Boolean {
+        if (url.isEmpty()) return false
+        return try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            true
         } catch (e: Exception) {
             false
         }

@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Aplica o modo "console": orientacao paisagem e tela cheia imersiva.
@@ -9,8 +8,7 @@ class ScreenMode {
   ScreenMode._();
 
   static void lockLandscape() {
-    if (kIsWeb) return;
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
@@ -19,8 +17,7 @@ class ScreenMode {
   }
 
   static void setFullscreen(bool fullscreen) {
-    if (kIsWeb) return;
-    if (!Platform.isAndroid && !Platform.isIOS) return;
+    if (!Platform.isAndroid) return;
     SystemChrome.setEnabledSystemUIMode(
       fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
     );
