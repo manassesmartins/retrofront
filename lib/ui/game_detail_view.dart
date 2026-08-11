@@ -187,13 +187,13 @@ class _GameDetailViewState extends State<GameDetailView> {
                           tooltip: 'Voltar',
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(Icons.arrow_back),
-                          color: Colors.white70,
+                          color: AppTheme.textSecondary,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             widget.system.fullName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -328,8 +328,8 @@ class _Details extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppTheme.textPrimary,
             fontSize: 26,
             fontWeight: FontWeight.w800,
             height: 1.2,
@@ -378,10 +378,10 @@ class _Details extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         if (meta?.description != null) ...[
-          const Text(
+          Text(
             'Descrição',
             style: TextStyle(
-              color: Colors.white,
+              color: AppTheme.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -389,17 +389,17 @@ class _Details extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             meta!.description!,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
               fontSize: 14,
               height: 1.5,
             ),
           ),
         ] else
-          const Text(
+          Text(
             'Nenhuma informação disponível. Use "Baixar capa/infos" '
             'para buscar dados e capas pela internet.',
-            style: TextStyle(color: Colors.white38, fontSize: 14),
+            style: TextStyle(color: AppTheme.textFaint, fontSize: 14),
           ),
       ],
     );
@@ -409,13 +409,13 @@ class _Details extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2633),
+        color: AppTheme.surfaceHigh,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: AppTheme.border),
       ),
       child: Text(
         text,
-        style: const TextStyle(color: Colors.white70, fontSize: 12),
+        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
       ),
     );
   }

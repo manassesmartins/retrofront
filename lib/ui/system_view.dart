@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/android_storage.dart';
+import '../core/app_dirs.dart';
 import '../core/app_scope.dart';
 import '../core/route_observer.dart';
 import '../gamepad/gamepad_manager.dart';
@@ -40,6 +41,7 @@ class _SystemViewState extends State<SystemView>
   bool _depsReady = false;
   bool _routeSubscribed = false;
   bool _updateChecked = false;
+  bool _defaultStructureEnsured = false;
   DateTime _lastActivity = DateTime.now();
   bool _screensaverOn = false;
   Timer? _screensaverTimer;
@@ -139,6 +141,16 @@ class _SystemViewState extends State<SystemView>
       }
       _androidAccess =
           !AndroidStorage.isNeeded || await AndroidStorage.hasAccess();
+      // Pasta padrao: monta a estrutura Retrofront na primeira inicializacao
+      // (apenas quando o acesso ja foi concedido; ao conceder depois, o
+      // resume re-roda este fluxo).
+      if (!_defaultStructureEnsured &&
+          _svc.settings.getRomsPath() == null &&
+          await AndroidStorage.hasAccess()) {
+        _defaultStructureEnsured = true;
+        final base = await AppDirs.defaultBaseDir();
+        await _svc.systems.ensureDefaultFolders(base.path);
+      }
       final systems = await _svc.scanner.scanSystems(
         romsOverride: _svc.settings.getRomsPath(),
       );
@@ -228,7 +240,11 @@ class _SystemViewState extends State<SystemView>
       dialogTitle: 'Pasta de ROMs',
     );
     if (path == null) return;
-    await _svc.settings.setRomsPath(path);
+    // Cria a estrutura padrão (Retrofront/ROMs, BIOS, SAVES, CONFIGS,
+    // COVERS, TEXTUREPACKS) dentro da pasta escolhida.
+    final romsPath = await _svc.systems.ensureDefaultFolders(path);
+    await _svc.settings.setRomsPath(romsPath);
+    AppDirs.useRomsOverride(romsPath);
     await _load();
   }
 
@@ -268,11 +284,11 @@ class _SystemViewState extends State<SystemView>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text(
+        title: Text(
           'Modo quiosque',
           style: TextStyle(color: AppTheme.textPrimary),
         ),
-        content: const Text(
+        content: Text(
           'As configurações estão ocultas no modo quiosque. '
           'Deseja sair do modo quiosque e abrir as configurações?',
           style: TextStyle(color: AppTheme.textSecondary),
@@ -330,9 +346,12 @@ class _SystemViewState extends State<SystemView>
                 color: _systems.isEmpty
                     ? AppTheme.accent
                     : AppTheme.systemColor(_systems[_selected].name),
+                artPath: _systems.isEmpty
+                    ? null
+                    : AppDirs.systemArtPath(_systems[_selected].name),
               ),
               if (_loading)
-                const Center(
+                Center(
                   child: CircularProgressIndicator(color: AppTheme.accent),
                 )
               else if (_hasError)
@@ -348,10 +367,12 @@ class _SystemViewState extends State<SystemView>
                   icon: Icons.folder_off_outlined,
                   title: 'Nenhum sistema encontrado',
                   message:
-                      'Escolha a pasta onde ficam suas ROMs (uma subpasta '
-                      'por console: nes, snes, psx, gba...) e o app monta a '
-                      'biblioteca.\nNo Android é preciso também conceder acesso '
-                      'aos arquivos para ler a pasta.',
+                      'Escolha onde criar a biblioteca e o app monta a '
+                      'estrutura RetroFront automaticamente (ROMs por console, '
+                      'BIOS, SAVES, CONFIGS, COVERS, SYSTEMART e '
+                      'TEXTUREPACKS).\n'
+                      'No Android é preciso também conceder acesso aos '
+                      'arquivos para ler a pasta.',
                   actionLabel: 'Escolher pasta de ROMs',
                   actionIcon: Icons.folder_open,
                   onAction: _pickRomsFolder,
@@ -462,7 +483,7 @@ class _TopBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   colors: [AppTheme.accent, AppTheme.accentAlt],
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -475,7 +496,7 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          const Text(
+          Text(
             'RetroFront',
             style: TextStyle(
               color: AppTheme.textPrimary,
@@ -489,14 +510,14 @@ class _TopBar extends StatelessWidget {
             tooltip: 'Atualizar',
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh),
-            color: Colors.white70,
+            color: AppTheme.textSecondary,
           ),
           if (onSettings != null)
             IconButton(
               tooltip: 'Configurações',
               onPressed: onSettings,
               icon: const Icon(Icons.settings),
-              color: Colors.white70,
+              color: AppTheme.textSecondary,
             ),
         ],
       ),
@@ -623,18 +644,18 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
+        color: AppTheme.surface.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: Colors.white70),
+          Icon(icon, size: 13, color: AppTheme.textSecondary),
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppTheme.textPrimary,
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
             ),
@@ -673,8 +694,8 @@ class _Message extends StatelessWidget {
     final secondary = secondaryLabel != null && onSecondaryAction != null
         ? OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white38),
+              foregroundColor: AppTheme.textPrimary,
+              side: BorderSide(color: AppTheme.border),
             ),
             onPressed: onSecondaryAction,
             icon: Icon(secondaryIcon ?? Icons.settings),
@@ -687,12 +708,12 @@ class _Message extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: Colors.white38),
+            Icon(icon, size: 56, color: AppTheme.textFaint),
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -701,7 +722,7 @@ class _Message extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               message,
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),

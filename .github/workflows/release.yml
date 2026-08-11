@@ -1,8 +1,8 @@
 name: Release
 
 # Auto-versionamento e releases:
-#  - A cada 10 commits acumulados na main, gera automaticamente uma
-#    pré-release (Nightly/Beta) com o APK, ex.: v1.0.20-beta.
+#  - A cada commit/push na main, gera automaticamente uma pré-release
+#    (Beta) com o APK, ex.: v1.0.42-beta.
 #  - Releases estáveis (ex.: v1.1.0) só são criadas manualmente via
 #    "Run workflow" informando a versão desejada.
 
@@ -44,15 +44,13 @@ jobs:
             echo "tag=v$STABLE"                    >> "$GITHUB_OUTPUT"
             echo "prerelease=false"                >> "$GITHUB_OUTPUT"
             echo "should_release=true"             >> "$GITHUB_OUTPUT"
-          elif [ $((COMMITS % 10)) -eq 0 ]; then
-            # A cada 10 commits: pré-release Nightly/Beta.
+          else
+            # A cada commit na main: pré-release Beta.
             echo "version_name=1.0.${COMMITS}-beta" >> "$GITHUB_OUTPUT"
             echo "version_code=$COMMITS"           >> "$GITHUB_OUTPUT"
             echo "tag=v1.0.${COMMITS}-beta"        >> "$GITHUB_OUTPUT"
             echo "prerelease=true"                 >> "$GITHUB_OUTPUT"
             echo "should_release=true"             >> "$GITHUB_OUTPUT"
-          else
-            echo "should_release=false"            >> "$GITHUB_OUTPUT"
           fi
 
       - name: Baixar dependências
@@ -94,7 +92,7 @@ jobs:
             exit 0
           fi
           if [ "$PRERELEASE" = "true" ]; then
-            NOTES="Build automático (auto-versionamento). A cada 10 alterações na main uma nova pré-release é gerada."
+            NOTES="Build automático (auto-versionamento). A cada commit na main uma nova pré-release Beta é gerada."
           else
             NOTES="Release estável do RetroFront."
           fi

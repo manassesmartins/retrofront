@@ -154,16 +154,22 @@ class LaunchService {
     SystemDefinition system,
     GameEntry game,
   ) async {
-    final pkg = await _androidRetroArchPackage();
+    final pkg = await findRetroArch();
     if (pkg == null) {
       return const LaunchResult.failure(
         'RetroArch não está instalado. Instale o RetroArch na Play Store '
         'ou em retroarch.com para jogar.',
       );
     }
+    // Core do sistema (comando es_systems.json ou override do usuário),
+    // no formato "_libretro_android.so" usado pelos cores do Android.
+    final core = _androidCorePath(pkg, system);
     const channel = MethodChannel('retrofront/launcher');
     try {
-      final ok = await channel.invokeMethod<bool>('launchRetroArch', game.path);
+      final ok = await channel.invokeMethod<bool>('launchRetroArch', {
+        'rom': game.path,
+        'core': core,
+      });
       if (ok == true) return const LaunchResult.success();
       return LaunchResult.failure(
         'Não foi possível abrir "${game.name}". O formato pode não ser '
@@ -172,6 +178,43 @@ class LaunchService {
     } on PlatformException catch (e) {
       return LaunchResult.failure(e.message ?? 'Falha ao lançar emulador.');
     }
+  }
+
+  /// Nome base do core do RetroArch para [system] (ex.: "mesen_libretro.so"),
+  /// vindo do comando do sistema ou do override configurado pelo usuário.
+  String? _coreForSystem(SystemDefinition system) {
+    final override = settings.getSystemOverride(system.name);
+    String? raw;
+    if (override?.hasCore ?? false) {
+      raw = override!.core.trim();
+    } else {
+      final m = RegExp(
+        r'-L\s+(\S+)',
+        caseSensitive: false,
+      ).firstMatch(system.command ?? '');
+      raw = m?.group(1);
+    }
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.endsWith('.so')) return p.basename(raw);
+    if (raw.contains('/') || raw.contains('\\')) return p.basename(raw);
+    if (raw.endsWith('_libretro')) return '$raw.so';
+    return '${raw}_libretro.so';
+  }
+
+  /// Caminho completo do core no Android (ex.:
+  /// "/data/data/com.retroarch/cores/mesen_libretro_android.so"). No Android os
+  /// cores ficam no diretorio privado do RetroArch com sufixo "_android";
+  /// sao passados via intent (RetroActivityFuture) para abrir o jogo ja com o
+  /// core certo, sem o RetroArch precisar adivinhar.
+  String? _androidCorePath(String pkg, SystemDefinition system) {
+    final core = _coreForSystem(system);
+    if (core == null || core.isEmpty) return null;
+    final file = core.endsWith('_android.so')
+        ? core
+        : core.endsWith('.so')
+            ? '${core.substring(0, core.length - 3)}_android.so'
+            : '${core}_android.so';
+    return '/data/data/$pkg/cores/$file';
   }
 
   /// Substitui os placeholders do comando pelo caminho real do emulador.
@@ -186,12 +229,31 @@ class LaunchService {
     return cmd;
   }
 
+  /// Resultado da deteccao em cache: o emulador e detectado uma unica vez
+  /// (como o ES-DE) e reusado em todos os lancamentos, evitando scans de
+  /// filesystem / subprocessos por jogo. Use [invalidateRetroArch] quando o
+  /// caminho configurado mudar ou quiser forcar nova deteccao.
+  String? _cachedRetroArch;
+
+  /// Invalida a deteccao em cache (ex.: usuario mudou o caminho do emulador).
+  void invalidateRetroArch() {
+    _cachedRetroArch = null;
+  }
+
   /// Detecta o RetroArch instalado automaticamente:
   ///   - override configurado pelo usuario tem prioridade;
   ///   - Android: pacote do RetroArch via PackageManager (qualquer versao);
   ///   - Linux: PATH, /usr, ~/.local, snap e exports do Flatpak.
   /// Retorna o caminho do executavel (desktop) ou o nome do pacote (Android).
-  Future<String?> findRetroArch() async {
+  /// Resultado e armazenado em cache ([force] ignora o cache).
+  Future<String?> findRetroArch({bool force = false}) async {
+    if (!force && _cachedRetroArch != null) return _cachedRetroArch;
+    final found = await _detectRetroArch();
+    _cachedRetroArch = found;
+    return found;
+  }
+
+  Future<String?> _detectRetroArch() async {
     final override = settings.getRetroArchPath();
     if (override != null && override.trim().isNotEmpty) {
       final f = File(override.trim());

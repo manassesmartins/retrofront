@@ -52,7 +52,7 @@ class CoverImage extends StatelessWidget {
           children: [
             Icon(
               Icons.videogame_asset_outlined,
-              color: Colors.white24,
+              color: AppTheme.textFaint,
               size: (width ?? 96) * 0.35,
             ),
             const SizedBox(height: 6),
@@ -62,7 +62,7 @@ class CoverImage extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white38,
+                color: AppTheme.textFaint,
                 fontSize: (width ?? 96) * 0.14,
                 fontWeight: FontWeight.w600,
               ),

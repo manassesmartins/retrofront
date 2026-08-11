@@ -204,7 +204,7 @@ class _SystemOptionsViewState extends State<SystemOptionsView> {
                     value.isEmpty ? desc : value,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                   trailing: const Icon(Icons.chevron_right),
                 ),

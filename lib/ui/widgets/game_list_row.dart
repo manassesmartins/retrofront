@@ -41,7 +41,7 @@ class GameListRow extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: radius,
           color: selected
-              ? Colors.white.withValues(alpha: 0.10)
+              ? AppTheme.accent.withValues(alpha: 0.18)
               : Colors.transparent,
         ),
         child: Row(
@@ -100,7 +100,7 @@ class GameListRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: selected
-                            ? Colors.white54
+                            ? AppTheme.textSecondary
                             : AppTheme.textFaint,
                         fontSize: 11.5,
                       ),
@@ -120,10 +120,10 @@ class GameListRow extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: const Color(0xFF2A3142),
+        color: AppTheme.surfaceHigh,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Icon(Icons.folder, color: Colors.white60, size: 22),
+      child: Icon(Icons.folder, color: AppTheme.textFaint, size: 22),
     );
   }
 }

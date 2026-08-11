@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'core/app_dirs.dart';
 import 'core/app_scope.dart';
 import 'core/route_observer.dart';
+import 'data/systems/system_art_installer.dart';
 import 'gamepad/gamepad_manager.dart';
 import 'ui/system_view.dart';
 import 'ui/theme.dart';
@@ -25,6 +27,14 @@ class _RetroFrontAppState extends State<RetroFrontApp> {
   void initState() {
     super.initState();
     _services = AppServices.build();
+    // Registra a pasta de ROMs escolhida para derivar a pasta principal da
+    // biblioteca (CONFIGS/COVERS/etc.) antes do primeiro carregamento.
+    _services.then((services) {
+      AppDirs.useRomsOverride(services.settings.getRomsPath());
+      // Instala as artes de fundo padrão em SYSTEMART (sem sobrescrever as
+      // do usuário) para os consoles terem fundo já no primeiro uso.
+      SystemArtInstaller.install();
+    });
     // Sons de navegação globais (liga/desliga em Configurações > Interface).
     _services.then((services) {
       _soundSub = services.gamepad.actions.listen((action) {
@@ -74,7 +84,8 @@ class _RetroFrontAppState extends State<RetroFrontApp> {
                 title: 'RetroFront',
                 debugShowCheckedModeBanner: false,
                 navigatorObservers: [routeObserver],
-                theme: AppTheme.dark(),
+                theme: AppTheme.build(dark: false),
+                darkTheme: AppTheme.build(dark: true),
                 themeMode: dark ? ThemeMode.dark : ThemeMode.light,
                 home: const SystemView(),
               );
@@ -91,7 +102,7 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppTheme.background,
       body: Center(
         child: Column(

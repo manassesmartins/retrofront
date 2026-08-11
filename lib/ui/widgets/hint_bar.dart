@@ -59,7 +59,7 @@ class _HintChip extends StatelessWidget {
         ],
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textFaint,
             fontSize: 12,
             fontWeight: FontWeight.w500,

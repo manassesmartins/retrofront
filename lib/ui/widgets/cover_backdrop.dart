@@ -6,10 +6,15 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 /// Fundo "console": imagem de capa desfocada e escurecida cobrindo a tela toda,
-/// ou um gradiente na cor do sistema quando nao ha capa disponivel.
+/// ou um gradiente na cor do sistema quando nao ha capa disponivel. A arte
+/// opcional da pasta SYSTEMART e sobreposta ao gradiente a 30% de opacidade.
 class CoverBackdrop extends StatelessWidget {
   /// Caminho absoluto de uma capa no disco. Se nulo/inexistente usa [color].
   final String? coverPath;
+
+  /// Arte de fundo do console (pasta SYSTEMART), exibida a 30% de opacidade
+  /// sobre o gradiente. Se nula/inexistente usa apenas o gradiente.
+  final String? artPath;
 
   /// Cor de fallback (geralmente a cor do sistema) para o gradiente.
   final Color color;
@@ -21,6 +26,7 @@ class CoverBackdrop extends StatelessWidget {
   const CoverBackdrop({
     super.key,
     this.coverPath,
+    this.artPath,
     required this.color,
     this.darken = 0,
   });
@@ -30,14 +36,40 @@ class CoverBackdrop extends StatelessWidget {
     final path = coverPath;
     final file = (path != null && path.isNotEmpty) ? File(path) : null;
     final hasCover = file != null && file.existsSync();
+    final dark = AppTheme.isDark;
 
     Widget base = DecoratedBox(
       decoration: BoxDecoration(
         gradient: AppTheme.systemGradient(
-          Color.lerp(color, Colors.black, darken.clamp(0.0, 1.0)) ?? color,
+          Color.lerp(
+            color,
+            dark ? Colors.black : Colors.white,
+            darken.clamp(0.0, 1.0),
+          ) ??
+              color,
         ),
       ),
     );
+
+    // Arte do console (SYSTEMART) a 30% de opacidade sobre o gradiente.
+    final artFile = artPath != null ? File(artPath!) : null;
+    if (artFile != null && artFile.existsSync()) {
+      base = Stack(
+        fit: StackFit.expand,
+        children: [
+          base,
+          Opacity(
+            opacity: 0.30,
+            child: Image.file(
+              artFile,
+              fit: BoxFit.cover,
+              cacheWidth: 720,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+        ],
+      );
+    }
 
     if (hasCover) {
       base = Stack(
@@ -52,16 +84,21 @@ class CoverBackdrop extends StatelessWidget {
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
-          // Escurece e equilibra para manter contraste com o texto.
+          // Equilibra o brilho da capa para manter contraste com o texto.
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color.lerp(color, Colors.black, 0.72)!,
-                  Colors.black.withValues(alpha: 0.72),
-                ],
+                colors: dark
+                    ? [
+                        Color.lerp(color, Colors.black, 0.72)!,
+                        Colors.black.withValues(alpha: 0.72),
+                      ]
+                    : [
+                        Colors.white.withValues(alpha: 0.66),
+                        Colors.white.withValues(alpha: 0.74),
+                      ],
                 stops: const [0.0, 1.0],
               ),
             ),
@@ -75,12 +112,14 @@ class CoverBackdrop extends StatelessWidget {
       children: [
         base,
         // Vinheta sutil para dar profundidade.
-        const DecoratedBox(
+        DecoratedBox(
           decoration: BoxDecoration(
             gradient: RadialGradient(
               radius: 1.35,
-              colors: [Colors.transparent, Color(0x66000000)],
-              stops: [0.72, 1.0],
+              colors: dark
+                  ? [Colors.transparent, const Color(0x66000000)]
+                  : [Colors.transparent, const Color(0x14000000)],
+              stops: const [0.72, 1.0],
             ),
           ),
         ),

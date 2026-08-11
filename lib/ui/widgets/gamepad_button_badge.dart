@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gamepads/gamepads.dart';
 
+import '../theme.dart';
+
 /// Insignia que representa um botao fisico de controle (A, B, Start, D-Pad…),
 /// usado nos atalhos de navegacao exibidos na interface.
 class GamepadButtonBadge extends StatelessWidget {
@@ -81,7 +83,7 @@ class GamepadButtonBadge extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.06),
+        color: _fill(),
         border: border,
       ),
       alignment: Alignment.center,
@@ -96,7 +98,7 @@ class GamepadButtonBadge extends StatelessWidget {
       height: size * 0.74,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size),
-        color: Colors.white.withValues(alpha: 0.06),
+        color: _fill(),
         border: border,
       ),
       alignment: Alignment.center,
@@ -112,5 +114,11 @@ class GamepadButtonBadge extends StatelessWidget {
             )
           : child,
     );
+  }
+
+  Color _fill() {
+    return AppTheme.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
   }
 }

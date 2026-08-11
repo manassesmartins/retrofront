@@ -173,7 +173,7 @@ class _CoverSystemsViewState extends State<CoverSystemsView> {
           children: [
             CoverBackdrop(color: AppTheme.accent, darken: 0.62),
             if (_loading)
-              const Center(
+              Center(
                 child: CircularProgressIndicator(color: AppTheme.accent),
               )
             else
@@ -202,7 +202,7 @@ class _CoverSystemsViewState extends State<CoverSystemsView> {
                           checked
                               ? Icons.check_box
                               : Icons.check_box_outline_blank,
-                          color: checked ? AppTheme.accent : Colors.white38,
+                          color: checked ? AppTheme.accent : AppTheme.textFaint,
                         ),
                         title: Text(
                           system.fullName,
@@ -217,7 +217,7 @@ class _CoverSystemsViewState extends State<CoverSystemsView> {
                         ),
                         subtitle: Text(
                           system.name,
-                          style: const TextStyle(color: Colors.white54),
+                          style: TextStyle(color: AppTheme.textSecondary),
                         ),
                       ),
                     ),

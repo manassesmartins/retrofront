@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gamepads/gamepads.dart' show GamepadButton;
+import 'package:gamepads/gamepads.dart' show GamepadAxis, GamepadButton;
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
+import 'package:retrofront/core/app_dirs.dart';
 import 'package:retrofront/core/app_languages.dart';
 import 'package:retrofront/data/gamelist/gamelist_repository.dart';
 import 'package:retrofront/data/launch/launch_service.dart';
@@ -320,6 +322,138 @@ void main() {
     });
   });
 
+  group('GamepadManager multi-controle e combos', () {
+    test('Select segurado + Start emite Home (e suprime Start)', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.handleButtonForTest(GamepadButton.back);
+      manager.handleButtonForTest(GamepadButton.start);
+      manager.handleButtonForTest(GamepadButton.start, release: true);
+      manager.handleButtonForTest(GamepadButton.back, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(actions, contains(GamepadAction.select));
+      expect(actions, contains(GamepadAction.home));
+      expect(actions, isNot(contains(GamepadAction.start)));
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('Start sozinho emite Start (combo exige Select segurado)', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.handleButtonForTest(GamepadButton.start);
+      manager.handleButtonForTest(GamepadButton.start, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, [GamepadAction.start]);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('Select + LB/RB emite pagina anterior/proxima', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.handleButtonForTest(GamepadButton.back);
+      manager.handleButtonForTest(GamepadButton.leftBumper);
+      manager.handleButtonForTest(GamepadButton.leftBumper, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(actions, contains(GamepadAction.pageUp));
+
+      actions.clear();
+      manager.handleButtonForTest(GamepadButton.rightBumper);
+      manager.handleButtonForTest(GamepadButton.rightBumper, release: true);
+      manager.handleButtonForTest(GamepadButton.back, release: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, contains(GamepadAction.pageDown));
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('analogicos direito e gatilhos geram acoes', () async {
+      final manager = GamepadManager();
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+
+      manager.handleAxisForTest(GamepadAxis.rightStickX, 0.8);
+      manager.handleAxisForTest(GamepadAxis.rightStickX, 0);
+      manager.handleAxisForTest(GamepadAxis.leftTrigger, 0.9);
+      manager.handleAxisForTest(GamepadAxis.leftTrigger, 0);
+      manager.handleAxisForTest(GamepadAxis.rightTrigger, 0.9);
+      manager.handleAxisForTest(GamepadAxis.rightTrigger, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(actions,
+          [GamepadAction.right, GamepadAction.pageUp, GamepadAction.pageDown]);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('suporta ate 4 controles e remap por controle', () async {
+      final manager = GamepadManager();
+      manager.registerPlayerForTest('p1', 'Xbox');
+      manager.registerPlayerForTest('p2', 'PS5');
+      manager.registerPlayerForTest('p3', 'Switch');
+      manager.registerPlayerForTest('p4', 'Genérico');
+      expect(manager.players.length, 4);
+      // 5o controle nao ganha slot, mas continua navegando com o mapa padrao.
+      expect(manager.registerPlayerForTest('p5', 'Extra'), isNull);
+      expect(manager.players.length, 4);
+      expect(manager.players.map((p) => p.playerNumber).toList(), [1, 2, 3, 4]);
+
+      manager.applyOverridesFor('Xbox', {GamepadButton.a: GamepadAction.home});
+
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+      manager.handleButtonForTest(GamepadButton.a, gamepadId: 'p1');
+      manager.handleButtonForTest(GamepadButton.a, release: true, gamepadId: 'p1');
+      manager.handleButtonForTest(GamepadButton.a, gamepadId: 'p2');
+      manager.handleButtonForTest(GamepadButton.a, release: true, gamepadId: 'p2');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      // p1 (Xbox) usa o mapa proprio; p2 (PS5) cai no padrao (confirmar).
+      expect(actions, [GamepadAction.home, GamepadAction.confirm]);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('setControllerButtonMaps aplica mapas a controles ja conectados',
+        () async {
+      final manager = GamepadManager();
+      manager.registerPlayerForTest('x1', 'Xbox');
+      manager.setControllerButtonMaps({'Xbox': 'a=home'});
+
+      final actions = <GamepadAction>[];
+      final sub = manager.actions.listen(actions.add);
+      manager.handleButtonForTest(GamepadButton.a, gamepadId: 'x1');
+      manager.handleButtonForTest(GamepadButton.a, release: true, gamepadId: 'x1');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(actions, [GamepadAction.home]);
+
+      await sub.cancel();
+      manager.dispose();
+    });
+
+    test('serializeOverrides gera string no formato button=action', () {
+      expect(
+        GamepadManager.serializeOverrides({
+          GamepadButton.a: GamepadAction.home,
+        }),
+        'a=home',
+      );
+    });
+  });
+
   group('SystemOverride', () {
     test('serializa e desserializa JSON', () {
       const ov = SystemOverride(core: 'mesen', extraArgs: '--verbose');
@@ -410,6 +544,33 @@ void main() {
           'ra -L mesen_libretro.so %ROM%');
     });
   });
+
+  group('SystemArtPath', () {
+    setUp(() => AppDirs.useRomsOverride(null));
+
+    test('resolver a arte na pasta SYSTEMART da biblioteca', () {
+      final base = Directory.systemTemp.createTempSync('retrofront_art');
+      final lib = p.join(base.path, 'Retrofront');
+      final artDir = Directory(p.join(lib, 'SYSTEMART'));
+      artDir.createSync(recursive: true);
+      File(p.join(artDir.path, 'nes.png')).writeAsStringSync('x');
+      addTearDown(() => base.deleteSync(recursive: true));
+
+      AppDirs.useRomsOverride(p.join(lib, 'ROMs'));
+
+      final art = AppDirs.systemArtPath('nes');
+      expect(art, isNotNull);
+      expect(art!.endsWith('nes.png'), isTrue);
+      expect(AppDirs.systemArtPath('snes'), isNull);
+      expect(AppDirs.systemArtPath(''), isNull);
+    });
+
+    test('sem biblioteca retorna null', () {
+      AppDirs.useRomsOverride('/caminho/que/nao/existe');
+
+      expect(AppDirs.systemArtPath('nes'), isNull);
+    });
+  });
 }
 
 class _FakeDefRepo implements SystemDefinitionsRepository {
@@ -426,6 +587,9 @@ class _FakeDefRepo implements SystemDefinitionsRepository {
     }
     return null;
   }
+
+  @override
+  Future<String> ensureDefaultFolders(String baseDir) async => baseDir;
 }
 
 class _StubGamelist implements GamelistRepository {

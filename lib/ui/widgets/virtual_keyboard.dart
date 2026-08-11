@@ -476,17 +476,18 @@ class _Key extends StatelessWidget {
                   : selected
                       ? AppTheme.accent.withValues(alpha: 0.55)
                       : isAction
-                          ? AppTheme.surfaceHigh
-                          : Colors.white12,
+                          ? AppTheme.accent.withValues(alpha: 0.18)
+                          : AppTheme.surfaceHigh,
               border: Border.all(
-                color: selected ? Colors.white : Colors.white12,
+                color: selected ? AppTheme.accent : AppTheme.border,
                 width: selected ? 1.6 : 1,
               ),
             ),
             child: Text(
               label,
               style: TextStyle(
-                color: active || selected ? Colors.white : AppTheme.textPrimary,
+                color:
+                    active || selected ? AppTheme.onAccent : AppTheme.textPrimary,
                 fontSize: height * 0.42,
                 fontWeight: isAction ? FontWeight.w700 : FontWeight.w500,
               ),
@@ -518,19 +519,19 @@ Future<String?> showVirtualKeyboardDialog(
           contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
           title: Row(
             children: [
-              const Icon(Icons.keyboard_alt_outlined,
+              Icon(Icons.keyboard_alt_outlined,
                   color: AppTheme.accentAlt, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(color: Colors.white, fontSize: 17),
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 17),
                 ),
               ),
               IconButton(
                 tooltip: 'Cancelar',
                 onPressed: () => Navigator.of(dialogCtx).pop(),
-                icon: const Icon(Icons.close, color: Colors.white54),
+                icon: Icon(Icons.close, color: AppTheme.textSecondary),
               ),
             ],
           ),
@@ -552,8 +553,8 @@ Future<String?> showVirtualKeyboardDialog(
                     obscure ? '•' * controller.text.length : controller.text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
                       fontSize: 17,
                       letterSpacing: 0.6,
                     ),

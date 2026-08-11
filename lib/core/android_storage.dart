@@ -1,6 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+/// Canal nativo (MainActivity) para gerenciar o "All files access" direto pelo
+/// sistema, mais confiavel que o plugin em alguns OEMs/versoes.
+const _channel = MethodChannel('retrofront/storage');
 
 /// Acesso amplo ao armazenamento no Android (pastas publicas como
 /// /storage/emulated/0/ROMs).
@@ -25,7 +30,10 @@ class AndroidStorage {
   static Future<bool> hasAccess() async {
     if (!isNeeded) return true;
     if (_isAndroid11Plus) {
-      return await Permission.manageExternalStorage.isGranted;
+      // Prefere o check nativo (Environment.isExternalStorageManager); se o
+      // canal nao estiver disponivel (ex.: testes), cai no plugin.
+      return await _invoke<bool>('isAllFilesAccess') ??
+          await Permission.manageExternalStorage.isGranted;
     }
     return await Permission.storage.isGranted;
   }
@@ -38,7 +46,13 @@ class AndroidStorage {
     if (await hasAccess()) return true;
 
     if (_isAndroid11Plus) {
+      // 1) Tela especifica do sistema via canal nativo.
+      if (await _openAllFilesAccess()) return hasAccess();
+      // 2) Fallback: plugin (mesmo intent de "All files access").
       await Permission.manageExternalStorage.request();
+      if (await hasAccess()) return true;
+      // 3) Ultimo recurso: configuracoes do app (toggle manual).
+      await openSettings();
       return hasAccess();
     }
 
@@ -51,6 +65,29 @@ class AndroidStorage {
   /// MANAGE_EXTERNAL_STORAGE nao abre em alguns OEMs/Android 15.
   static Future<bool> openSettings() async {
     if (!isNeeded) return true;
-    return openAppSettings();
+    return await _invoke<bool>('openAppSettings') ?? openAppSettings();
+  }
+
+  static Future<bool> _openAllFilesAccess() async {
+    final opened = await _invoke<bool>('openAllFilesAccess');
+    if (opened == true) return true;
+    // Fallback: o plugin tenta o mesmo intent; true indica que a tela foi
+    // aberta (o estado real e verificado depois, ao voltar do sistema).
+    try {
+      await Permission.manageExternalStorage.request();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<T?> _invoke<T>(String method) async {
+    try {
+      return await _channel.invokeMethod<T>(method);
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
   }
 }

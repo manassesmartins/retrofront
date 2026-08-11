@@ -55,15 +55,21 @@ android {
         }
     }
 
+    // Mesma chave para debug e release: assim todo APK instalado (teste ou
+    // distribuicao) tem a mesma assinatura e a atualizacao nunca falha com
+    // "problema de pacotes" (INSTALL_FAILED_UPDATE_INCOMPATIBLE).
+    val appSigningConfig = if (keystorePropertiesFile.exists()) {
+        signingConfigs.getByName("release")
+    } else {
+        signingConfigs.getByName("debug")
+    }
+
     buildTypes {
+        debug {
+            signingConfig = appSigningConfig
+        }
         release {
-            // Usa a assinatura propria se android/key.properties existir;
-            // caso contrario, assina com a chave de debug (somente para testes).
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = appSigningConfig
         }
     }
 }

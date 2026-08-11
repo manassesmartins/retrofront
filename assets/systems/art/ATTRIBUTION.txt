@@ -1,0 +1,79 @@
+ARTES DE FUNDO POR CONSOLE (assets/systems/art)
+================================================
+
+Estas imagens sao artes padrao de fundo usadas apenas como exibicao na
+interface, baixadas do Wikimedia Commons (arquivos de dominio publico ou sob
+licencas livres CC-BY/CC-BY-SA/CC0). Cada arquivo e um JPEG normalizado
+(640px) do console correspondente. O usuario pode substituir qualquer arte
+colocando sua propria imagem em <biblioteca>/SYSTEMART/<nome>.png (ou .jpg).
+
+Fontes (titulo original -> URL):
+
+3do            -> https://commons.wikimedia.org/wiki/File:3DO-FZ-10-Console-FL.png
+amiga          -> https://commons.wikimedia.org/wiki/File:Amiga-CD32-wController-L.jpg
+amigacd32      -> https://commons.wikimedia.org/wiki/File:Amiga-CD32-CD-Flap-Open.jpg
+amstradcpc     -> https://commons.wikimedia.org/wiki/File:Amstrad_CPC464.jpg
+apple2         -> https://commons.wikimedia.org/wiki/File:Apple_II_IMG_4213.jpg
+arcade         -> https://commons.wikimedia.org/wiki/File:Borne_arcade_Pacman.png
+atari2600      -> https://commons.wikimedia.org/wiki/File:Atari-2600-Jr-Console-01.jpg
+atari5200      -> https://commons.wikimedia.org/wiki/File:Atari-5200-4-Port-wController-L.jpg
+atari7800      -> https://commons.wikimedia.org/wiki/File:Atari-7800-Console-Set.jpg
+atari800       -> https://commons.wikimedia.org/wiki/File:Atari-800-Computer-FL-No-Top.jpg
+atarijaguar    -> https://commons.wikimedia.org/wiki/File:Atari-Jaguar-Console-Set.jpg
+atarilynx      -> https://commons.wikimedia.org/wiki/File:Atari-Lynx-II-Handheld-Angled.jpg
+atarist        -> https://commons.wikimedia.org/wiki/File:Atari-520ST.jpg
+c64            -> https://commons.wikimedia.org/wiki/File:Commodore-64-Computer-BL.jpg
+colecovision   -> https://commons.wikimedia.org/wiki/File:ColecoVision-wController-L.jpg
+cps1           -> https://commons.wikimedia.org/wiki/File:Streetfighter1.jpg
+cps2           -> https://commons.wikimedia.org/wiki/File:Street_Fighter_II_arcade_machine.jpg
+dos            -> https://commons.wikimedia.org/wiki/File:IBM_PC_5150.jpg
+dreamcast      -> https://commons.wikimedia.org/wiki/File:Dreamcast-Console-Set.jpg
+famicom        -> https://commons.wikimedia.org/wiki/File:Nintendo-Famicom-Console-FL.jpg
+fds            -> https://commons.wikimedia.org/wiki/File:Nintendo-Famicom-Disk-System-Deck-01.jpg
+gameandwatch   -> https://commons.wikimedia.org/wiki/File:Nintendo_Game_%26_Watch_-_Boxing.jpg
+gb             -> https://commons.wikimedia.org/wiki/File:Game-Boy-FL.jpg
+gba            -> https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Milky-Blue-FL.jpg
+gbc            -> https://commons.wikimedia.org/wiki/File:Game-Boy-Color-Yellow.jpg
+gc             -> https://commons.wikimedia.org/wiki/File:GameCube-Set.jpg
+genesis        -> https://commons.wikimedia.org/wiki/File:Sega-Genesis-6But-Cont.jpg
+gg             -> https://commons.wikimedia.org/wiki/File:Game-Gear-Handheld.jpg
+intellivision  -> https://commons.wikimedia.org/wiki/File:Intellivision-Console-Set.jpg
+jaguar         -> https://commons.wikimedia.org/wiki/File:Atari-Jaguar-Console-Set.jpg
+lynx           -> https://commons.wikimedia.org/wiki/File:Atari-Lynx-II-Handheld-Angled.jpg
+mame           -> https://commons.wikimedia.org/wiki/File:Cocktail_table_arcade_game_(white_background).jpg
+master         -> https://commons.wikimedia.org/wiki/File:Sega-Master-System-Console-BL.jpg
+msx            -> https://commons.wikimedia.org/wiki/File:Canon_V-20_MSX_computer_(3).jpg
+msx2           -> https://commons.wikimedia.org/wiki/File:Panasonic_FS-A1_20180519a.jpg
+n3ds           -> https://commons.wikimedia.org/wiki/File:Nintendo-3DS-AquaOpen.jpg
+n64            -> https://commons.wikimedia.org/wiki/File:N64-Console-Set.png
+nds            -> https://commons.wikimedia.org/wiki/File:Nintendo-DS-Lite-Black-Open.jpg
+neogeo         -> https://commons.wikimedia.org/wiki/File:Neo-Geo-AES-BR.jpg
+nes            -> https://commons.wikimedia.org/wiki/File:Nintendo-Entertainment-System-NES-Console-BL.jpg
+ngp            -> https://commons.wikimedia.org/wiki/File:Neo-Geo-Pocket-Anthra-Left.jpg
+ngpc           -> https://commons.wikimedia.org/wiki/File:Neo-Geo-Pocket-Color-Anthra-Left.png
+odyssey2       -> https://commons.wikimedia.org/wiki/File:Magnavox-Odyssey-2-Console-Set.jpg
+pce            -> https://commons.wikimedia.org/wiki/File:Pc-engine-cropped-white-background.jpg
+pcecd          -> https://commons.wikimedia.org/wiki/File:PC-Engine-Duo-Console-Set.jpg
+pcfx           -> https://commons.wikimedia.org/wiki/File:NEC-PC-FX-wController-R.jpg
+pokemini       -> https://commons.wikimedia.org/wiki/File:PokemonMini.JPG
+ps2            -> https://commons.wikimedia.org/wiki/File:PS2-Versions.jpg
+psp            -> https://commons.wikimedia.org/wiki/File:2015_Konsola_Sony_PSP-3004.jpg
+psx            -> https://commons.wikimedia.org/wiki/File:PSX-Console-wController.jpg
+saturn         -> https://commons.wikimedia.org/wiki/File:Sega-Saturn-Console-Set-Mk1.png
+sega32x        -> https://commons.wikimedia.org/wiki/File:Sega-Genesis-32X-01.jpg
+segacd         -> https://commons.wikimedia.org/wiki/File:Sega-Mega-CD-with-Mega-Drive_on_top.jpg
+sg1000         -> https://commons.wikimedia.org/wiki/File:Sega-SG-1000-Console-Set.jpg
+snes           -> https://commons.wikimedia.org/wiki/File:Nintendo-Super-Famicom-Set-FL.jpg
+switch         -> https://commons.wikimedia.org/wiki/File:Nintendo-Switch-Console-Docked-wJoyConRB.jpg
+vb             -> https://commons.wikimedia.org/wiki/File:Virtual-Boy-Set.png
+wii            -> https://commons.wikimedia.org/wiki/File:Wii-Console-Back.jpg
+wiiu           -> https://commons.wikimedia.org/wiki/File:Nintendo-Wii-U-Console-BR.jpg
+wonderswan     -> https://commons.wikimedia.org/wiki/File:WonderSwan-Black-Left.jpg
+wonderswancolor-> https://commons.wikimedia.org/wiki/File:WonderSwan-Black-Left.jpg
+xbox           -> https://commons.wikimedia.org/wiki/File:Xbox-Console-Set.png
+xbox360        -> https://commons.wikimedia.org/wiki/File:Xbox-360-Consoles-Infobox.png
+zxspectrum     -> https://commons.wikimedia.org/wiki/File:Sinclair_ZX_Spectrum_(1982)_2.jpg
+
+Obs.: confira a licenca individual de cada arquivo na pagina do Wikimedia
+antes de redistribuir o aplicativo. Quando o usuario fornece sua propria
+imagem em SYSTEMART, ela substitui a arte padrao deste bundle.

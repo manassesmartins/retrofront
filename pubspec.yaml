@@ -73,6 +73,7 @@ flutter:
   assets:
     - assets/systems/es_systems.json
     - assets/systems/logos/
+    - assets/systems/art/
 
 flutter_launcher_icons:
   android: true

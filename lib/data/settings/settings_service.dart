@@ -24,6 +24,7 @@ class SettingsService {
   static const _kButtonScheme = 'button_scheme';
   static const _kLanguage = 'language';
   static const _kButtonMap = 'button_map';
+  static const _kControllerButtonMaps = 'controller_button_maps';
   static const _kScreenScraperUser = 'screenscraper_user';
   static const _kArcadeDbKey = 'arcadedb_key';
   static const _kMobyGamesKey = 'mobygames_key';
@@ -57,6 +58,7 @@ class SettingsService {
     _kButtonScheme,
     _kLanguage,
     _kButtonMap,
+    _kControllerButtonMaps,
     _kScreenScraperUser,
     _kArcadeDbKey,
     _kMobyGamesKey,
@@ -179,9 +181,26 @@ class SettingsService {
   Future<void> setLanguage(String value) => _p.setString(_kLanguage, value);
 
   /// Mapeamento de botões em formato serializado ("a=confirm;b=back;...").
+  /// Aplicado como padrao a controles sem mapa proprio.
   String getButtonMap() => _p.getString(_kButtonMap) ?? '';
 
   Future<void> setButtonMap(String value) => _p.setString(_kButtonMap, value);
+
+  /// Mapeamentos por nome de controle (remap por controle, ate 4 controles):
+  /// mapa "nome do controle" -> string serializada ("a=confirm;b=back;...").
+  Map<String, String> getControllerButtonMaps() {
+    final raw = _p.getString(_kControllerButtonMaps);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(k, v.toString()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setControllerButtonMaps(Map<String, String> value) =>
+      _p.setString(_kControllerButtonMaps, jsonEncode(value));
 
   /// Usuário ScreenScraper (para API pública).
   String getScreenScraperUser() => _p.getString(_kScreenScraperUser) ?? '';

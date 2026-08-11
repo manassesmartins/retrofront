@@ -130,8 +130,8 @@ class _OptionMenuSheetState extends State<OptionMenuSheet> {
                 children: [
                   Text(
                     widget.title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -196,18 +196,18 @@ class _OptionMenuSheetState extends State<OptionMenuSheet> {
                                 : AppTheme.accent),
                         title: Text(
                           opt.label,
-                          style: const TextStyle(color: Colors.white),
+                          style: TextStyle(color: AppTheme.textPrimary),
                         ),
                         subtitle: opt.subtitle == null
                             ? null
                             : Text(
                                 opt.subtitle!,
-                                style: const TextStyle(
-                                  color: Colors.white54,
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
                                 ),
                               ),
                         trailing: selected
-                            ? const Icon(Icons.play_arrow,
+                            ? Icon(Icons.play_arrow,
                                 color: AppTheme.accentAlt, size: 20)
                             : null,
                       ),

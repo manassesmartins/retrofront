@@ -76,7 +76,7 @@ class _ScrapeProgressDialogState extends State<ScrapeProgressDialog> {
             children: [
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.cloud_download,
                     color: AppTheme.accent,
                     size: 28,
@@ -85,8 +85,8 @@ class _ScrapeProgressDialogState extends State<ScrapeProgressDialog> {
                   Expanded(
                     child: Text(
                       _finished ? 'Concluído' : widget.title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
@@ -110,16 +110,16 @@ class _ScrapeProgressDialogState extends State<ScrapeProgressDialog> {
                     _total == 0
                         ? 'Preparando...'
                         : '$_done de $_total jogos',
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
                       fontSize: 13,
                     ),
                   ),
                   if (_finished)
                     Text(
                       _failed > 0 ? '$_success ok, $_failed falhas' : '$_success ok',
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -130,8 +130,8 @@ class _ScrapeProgressDialogState extends State<ScrapeProgressDialog> {
                 _current,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white38,
+                style: TextStyle(
+                  color: AppTheme.textFaint,
                   fontSize: 13,
                   fontStyle: FontStyle.italic,
                 ),

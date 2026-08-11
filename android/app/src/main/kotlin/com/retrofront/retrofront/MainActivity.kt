@@ -30,8 +30,10 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "launchRetroArch" -> {
-                    val path = call.arguments as? String ?: ""
-                    result.success(launchRetroArch(path))
+                    val args = call.arguments as? Map<*, *>
+                    val rom = args?.get("rom") as? String ?: ""
+                    val core = args?.get("core") as? String
+                    result.success(launchRetroArch(rom, core))
                 }
                 "detectRetroArch" -> {
                     result.success(findRetroArchPackage())
@@ -66,6 +68,23 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "retrofront/storage"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isAllFilesAccess" -> {
+                    result.success(isManageExternalStorageGranted())
+                }
+                "openAllFilesAccess" -> {
+                    result.success(openManageExternalStorage())
+                }
+                "openAppSettings" -> {
+                    result.success(openAppSettings())
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     /** Espaço livre/total do armazenamento (bytes), usado nas Configurações. */
@@ -84,7 +103,11 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
-    private val retroarchPackages = listOf("com.retroarch", "com.retroarch.bq.plus")
+    private val retroarchPackages = listOf(
+        "com.retroarch",
+        "com.retroarch.bq.plus",
+        "com.retroarch.aarch64"
+    )
 
     /** Encontra o pacote do RetroArch instalado (qualquer versao do Android). */
     private fun findRetroArchPackage(): String? {
@@ -109,7 +132,47 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
-    private fun launchRetroArch(romPath: String): Boolean {
+    private fun launchRetroArch(romPath: String, corePath: String?): Boolean {
+        val pkg = findRetroArchPackage() ?: return false
+
+        // 1) Estilo ES-DE: intent direto forcando o core (RetroActivityFuture),
+        // abrindo o jogo ja com o emulador/core certo, sem telas intermediarias.
+        if (!corePath.isNullOrEmpty() && File(romPath).exists()) {
+            if (launchWithCore(pkg, romPath, corePath)) return true
+        }
+
+        // 2) Fallback: FileProvider + ACTION_VIEW (RetroArch escolhe o core).
+        return launchByView(romPath)
+    }
+
+    /** Abre a ROM no RetroArch ja com o core definido, estilo ES-DE. */
+    private fun launchWithCore(pkg: String, romPath: String, corePath: String): Boolean {
+        val activity = "$pkg.browser.retroactivity.RetroActivityFuture"
+        val intent = Intent().apply {
+            setClassName(pkg, activity)
+            action = Intent.ACTION_VIEW
+            putExtra("ROM", romPath)
+            putExtra("LIBRETRO", corePath)
+            retroarchConfig(pkg)?.let { putExtra("CONFIGFILE", it) }
+        }
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Caminho do retroarch.cfg do RetroArch, se ja existir (null = usa o padrao). */
+    private fun retroarchConfig(pkg: String): String? {
+        val candidates = listOf(
+            "/storage/emulated/0/Android/data/$pkg/files/retroarch.cfg",
+            "/data/data/$pkg/retroarch.cfg"
+        )
+        return candidates.firstOrNull { File(it).exists() }
+    }
+
+    private fun launchByView(romPath: String): Boolean {
         val context = applicationContext
         val pkg = findRetroArchPackage() ?: return false
 
@@ -184,6 +247,51 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
         if (url.isEmpty()) return false
         return try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Android 11+ (API 30+): MANAGE_EXTERNAL_STORAGE ("All files access"). */
+    private fun isManageExternalStorageGranted(): Boolean {
+        return android.os.Build.VERSION.SDK_INT >= 30 &&
+            android.os.Environment.isExternalStorageManager()
+    }
+
+    /** Abre a tela de "All files access" do sistema (Android 11+). */
+    private fun openManageExternalStorage(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 30) return false
+        val context = applicationContext
+        val intent = Intent(
+            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+            Uri.parse("package:$packageName")
+        )
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            // Fallback para alguns OEMs: tela global (sem filtrar pelo app).
+            try {
+                startActivity(
+                    Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                )
+                true
+            } catch (e2: Exception) {
+                false
+            }
+        }
+    }
+
+    /** Abre as configuracoes do app (onde fica o toggle de permissao). */
+    private fun openAppSettings(): Boolean {
+        val context = applicationContext
+        val intent = Intent(
+            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:$packageName")
+        )
+        return try {
+            startActivity(intent)
             true
         } catch (e: Exception) {
             false

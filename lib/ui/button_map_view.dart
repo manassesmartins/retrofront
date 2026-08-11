@@ -21,9 +21,18 @@ class _ButtonMapViewState extends State<ButtonMapView> {
   late Map<GamepadButton, GamepadAction> _map;
   GamepadAction? _listening;
   StreamSubscription<GamepadAction>? _gamepadSub;
-  StreamSubscription<GamepadButton>? _rawSub;
+  StreamSubscription<RawGamepadEvent>? _rawSub;
+  StreamSubscription<List<GamepadPlayer>>? _playersSub;
   int _selected = 0;
   bool _depsReady = false;
+
+  List<GamepadPlayer> _players = [];
+
+  /// Selecao de destino: 0 = "Padrao (todos)"; 1..n = controle `_players[i-1]`.
+  int _sel = 0;
+
+  GamepadPlayer? get _selPlayer =>
+      _sel > 0 && _sel - 1 < _players.length ? _players[_sel - 1] : null;
 
   @override
   void initState() {
@@ -38,13 +47,32 @@ class _ButtonMapViewState extends State<ButtonMapView> {
     _depsReady = true;
     _gamepadSub = _svc.gamepad.actions.listen(_onGamepad);
     _rawSub = _svc.gamepad.rawButtons.listen(_onRawButton);
+    _playersSub = _svc.gamepad.controllers.listen(_onPlayers);
+    _reloadMap();
   }
 
   @override
   void dispose() {
     _gamepadSub?.cancel();
     _rawSub?.cancel();
+    _playersSub?.cancel();
     super.dispose();
+  }
+
+  void _onPlayers(List<GamepadPlayer> players) {
+    if (!mounted) return;
+    setState(() {
+      _players = players;
+      if (_sel > players.length) _sel = 0;
+      _reloadMap();
+    });
+  }
+
+  void _reloadMap() {
+    final player = _selPlayer;
+    _map = player != null
+        ? Map.of(player.overrides)
+        : Map.of(_svc.gamepad.defaultOverrides);
   }
 
   void _onGamepad(GamepadAction action) {
@@ -58,6 +86,12 @@ class _ButtonMapViewState extends State<ButtonMapView> {
         break;
       case GamepadAction.down:
         _move(1);
+        break;
+      case GamepadAction.left:
+        _switchPlayer(-1);
+        break;
+      case GamepadAction.right:
+        _switchPlayer(1);
         break;
       case GamepadAction.confirm:
         _activate();
@@ -78,20 +112,34 @@ class _ButtonMapViewState extends State<ButtonMapView> {
     }
   }
 
-  void _onRawButton(GamepadButton button) {
+  void _switchPlayer(int delta) {
+    if (_listening != null) return;
+    final count = 1 + _players.length;
+    final next = (_sel + delta + count) % count;
+    if (next == _sel) return;
+    setState(() {
+      _sel = next;
+      _reloadMap();
+    });
+  }
+
+  void _onRawButton(RawGamepadEvent event) {
     if (_listening == null) return;
-    if (!_map.containsKey(button)) {
+    final player = _selPlayer;
+    // Ao configurar um controle especifico, ignora botoes de outros controles.
+    if (player != null && event.gamepadId != player.id) return;
+    if (!_map.containsKey(event.button)) {
       final oldAction = _listening;
       if (oldAction != null) {
-        final entriesToRemove = _map.entries
+        final keysToRemove = _map.entries
             .where((e) => e.value == oldAction)
             .map((e) => e.key)
             .toList();
-        for (final key in entriesToRemove) {
+        for (final key in keysToRemove) {
           _map.remove(key);
         }
       }
-      _map[button] = oldAction!;
+      _map[event.button] = oldAction!;
       _saveAndExit();
     }
   }
@@ -137,17 +185,34 @@ class _ButtonMapViewState extends State<ButtonMapView> {
     }
   }
 
+  void _persist() {
+    final player = _selPlayer;
+    if (player != null) {
+      _svc.gamepad.applyOverridesFor(player.name, _map);
+      final maps =
+          Map<String, String>.of(_svc.settings.getControllerButtonMaps());
+      final serialized = GamepadManager.serializeOverrides(_map);
+      if (serialized.isEmpty) {
+        maps.remove(player.name);
+      } else {
+        maps[player.name] = serialized;
+      }
+      _svc.settings.setControllerButtonMaps(maps);
+    } else {
+      _svc.gamepad.setButtonOverrides(_map);
+      _svc.settings.setButtonMap(GamepadManager.serializeOverrides(_map));
+    }
+  }
+
   void _saveAndExit() {
-    _svc.gamepad.setButtonOverrides(_map);
-    _svc.settings.setButtonMap(_svc.gamepad.serializeButtonMap());
+    _persist();
     Navigator.of(context).pop();
   }
 
   void _resetToDefaults() {
     setState(() {
       _map.clear();
-      _svc.gamepad.setButtonOverrides({});
-      _svc.settings.setButtonMap('');
+      _persist();
     });
   }
 
@@ -167,6 +232,8 @@ class _ButtonMapViewState extends State<ButtonMapView> {
     final c = NavCallbacks();
     c.onUp = () => _move(-1);
     c.onDown = () => _move(1);
+    c.onLeft = () => _switchPlayer(-1);
+    c.onRight = () => _switchPlayer(1);
     c.onConfirm = () => _activate();
     c.onBack = () {
       if (_listening != null) {
@@ -182,6 +249,7 @@ class _ButtonMapViewState extends State<ButtonMapView> {
   @override
   Widget build(BuildContext context) {
     final listening = _listening;
+    final player = _selPlayer;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mapear Botões'),
@@ -199,6 +267,43 @@ class _ButtonMapViewState extends State<ButtonMapView> {
         callbacks: _callbacks,
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Configurar para:',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _chip('Padrão (todos)', 0),
+                        for (var i = 0; i < _players.length; i++)
+                          _chip('${_players[i].playerNumber} · ${_players[i].name}', i + 1),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    player != null
+                        ? 'O mapeamento abaixo vale para ${player.name}. '
+                            'Use ←/→ ou toque para trocar de controle.'
+                        : 'Mapeamento padrao aplicado a controles sem configuracao '
+                            'propria. Atalhos: Select+Start = Home, '
+                            'Select+LB/RB = página.',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(12),
@@ -235,7 +340,7 @@ class _ButtonMapViewState extends State<ButtonMapView> {
                               )
                             : Text(
                                 _labelForButton(button),
-                                style: const TextStyle(color: Colors.white70),
+                                style: TextStyle(color: AppTheme.textSecondary),
                               ),
                         trailing: isListening
                             ? const Icon(Icons.radio_button_unchecked)
@@ -245,7 +350,7 @@ class _ButtonMapViewState extends State<ButtonMapView> {
                                     : Icons.gamepad,
                                 color: selected
                                     ? AppTheme.accent
-                                    : Colors.white38,
+                                    : AppTheme.textFaint,
                               ),
                       ),
                     ),
@@ -255,6 +360,34 @@ class _ButtonMapViewState extends State<ButtonMapView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _chip(String label, int value) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: _sel == value ? AppTheme.textPrimary : AppTheme.textSecondary,
+          ),
+        ),
+        selected: _sel == value,
+        selectedColor: AppTheme.accent,
+        backgroundColor: AppTheme.surface.withValues(alpha: 0.6),
+        side: BorderSide(
+          color: _sel == value ? AppTheme.accent : AppTheme.border,
+        ),
+        onSelected: (_) {
+          if (_listening != null) return;
+          setState(() {
+            _sel = value;
+            _reloadMap();
+          });
+        },
       ),
     );
   }

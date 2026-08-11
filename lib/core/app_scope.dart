@@ -78,6 +78,7 @@ class AppServices {
     gamepad.setButtonOverrides(
       GamepadManager.deserializeButtonMap(settings.getButtonMap()),
     );
+    gamepad.setControllerButtonMaps(settings.getControllerButtonMaps());
 
     return AppServices(
       settings: settings,

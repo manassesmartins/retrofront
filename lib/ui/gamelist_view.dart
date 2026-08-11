@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/app_dirs.dart';
 import '../core/app_scope.dart';
 import '../gamepad/gamepad_manager.dart';
 import '../models/game_entry.dart';
@@ -392,6 +393,7 @@ class _GamelistViewState extends State<GamelistView> {
           children: [
             CoverBackdrop(
               coverPath: selected?.metadata?.coverPath,
+              artPath: AppDirs.systemArtPath(widget.system.name),
               color: AppTheme.systemColor(widget.system.name),
             ),
             SafeArea(
@@ -426,7 +428,7 @@ class _GamelistViewState extends State<GamelistView> {
                     ),
                   Expanded(
                     child: _loading
-                        ? const Center(
+                        ? Center(
                             child: CircularProgressIndicator(
                               color: AppTheme.accent,
                             ),
@@ -548,7 +550,7 @@ class _Header extends StatelessWidget {
                 tooltip: 'Voltar',
                 onPressed: onBack,
                 icon: const Icon(Icons.arrow_back),
-                color: Colors.white70,
+                color: AppTheme.textSecondary,
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -556,7 +558,7 @@ class _Header extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -568,14 +570,14 @@ class _Header extends StatelessWidget {
                 onPressed: onToggleSearch,
                 icon: Icon(
                   searching ? Icons.close : Icons.search,
-                  color: Colors.white70,
+                  color: AppTheme.textSecondary,
                 ),
               ),
               IconButton(
                 tooltip: 'Opções',
                 onPressed: onMenu,
                 icon: const Icon(Icons.more_vert),
-                color: Colors.white70,
+                color: AppTheme.textSecondary,
               ),
             ],
           ),
@@ -589,11 +591,11 @@ class _Header extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppTheme.surfaceHigh,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppTheme.border),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.search, color: Colors.white38, size: 18),
+                  Icon(Icons.search, color: AppTheme.textFaint, size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -604,8 +606,8 @@ class _Header extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: searchController.text.isEmpty
-                            ? Colors.white38
-                            : Colors.white,
+                            ? AppTheme.textFaint
+                            : AppTheme.textPrimary,
                         fontSize: 16,
                         letterSpacing: 0.4,
                       ),
@@ -646,14 +648,14 @@ class _DetailPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.folder, color: Colors.white54, size: 56),
+          Icon(Icons.folder, color: AppTheme.textFaint, size: 56),
           const SizedBox(height: 10),
           Text(
             entry.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -719,7 +721,7 @@ class _DetailPanel extends StatelessWidget {
             [genre, year, players].whereType<String>().join(' • '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
         ],
         if (showRatings && meta?.rating != null) ...[
@@ -732,8 +734,8 @@ class _DetailPanel extends StatelessWidget {
             meta!.description!,
             maxLines: isLandscape ? 4 : 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
               fontSize: 13,
               height: 1.45,
             ),
@@ -752,7 +754,7 @@ class _DetailPanel extends StatelessWidget {
               tooltip: 'Mais informações',
               onPressed: onDetails,
               icon: const Icon(Icons.info_outline),
-              color: Colors.white70,
+              color: AppTheme.textSecondary,
             ),
           ],
         ),
@@ -800,13 +802,13 @@ class _EmptyState extends StatelessWidget {
             Icon(
               searching ? Icons.search_off : Icons.inbox_outlined,
               size: 56,
-              color: Colors.white38,
+              color: AppTheme.textFaint,
             ),
             const SizedBox(height: 16),
             Text(
               searching ? 'Nada encontrado' : 'Nenhum jogo nesta pasta',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -814,10 +816,10 @@ class _EmptyState extends StatelessWidget {
             ),
             if (!searching) ...[
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Coloque os arquivos de ROM nesta pasta e toque em Atualizar '
                 '(menu ●●●), ou use "Baixar capas e informações".',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
             ],

@@ -194,7 +194,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
             tooltip: 'Voltar',
             onPressed: _goBack,
             icon: const Icon(Icons.arrow_back),
-            color: Colors.white70,
+            color: AppTheme.textSecondary,
           ),
           const SizedBox(width: 4),
           Icon(widget.category.icon, size: 20, color: accent),
@@ -204,7 +204,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
               widget.category.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -254,7 +254,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
                   border: Border.all(
                     color: selected
                         ? accent.withValues(alpha: 0.8)
-                        : Colors.white10,
+                        : AppTheme.border,
                     width: selected ? 1.5 : 1,
                   ),
                 ),
@@ -269,7 +269,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
                             opt.label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -281,7 +281,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
                               opt.description,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textFaint,
                                 fontSize: 12.5,
                                 height: 1.35,
@@ -324,7 +324,7 @@ class _SettingsCategoryViewState extends State<SettingsCategoryView> {
                                   : Icons.radio_button_unchecked)
                               : Icons.chevron_right,
                       size: 18,
-                      color: selected ? accent : Colors.white24,
+                      color: selected ? accent : AppTheme.textFaint,
                     ),
                   ],
                 ),

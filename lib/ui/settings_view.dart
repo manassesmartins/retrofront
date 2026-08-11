@@ -100,7 +100,15 @@ class _SettingsViewState extends State<SettingsView>
   }
 
   Future<void> _load() async {
-    final defaultRoms = (await AppDirs.romsRoot()).path;
+    // Nunca deixa a tela presa no loading: mesmo sem permissao no Android o
+    // caminho padrao e resolvido (romsRoot nao lanc;a) e a opcao de acesso
+    // aos arquivos fica visivel.
+    String defaultRoms;
+    try {
+      defaultRoms = (await AppDirs.romsRoot()).path;
+    } catch (_) {
+      defaultRoms = '';
+    }
     var androidAccess = true;
     if (AndroidStorage.isNeeded) {
       androidAccess = await AndroidStorage.hasAccess();
@@ -173,9 +181,10 @@ class _SettingsViewState extends State<SettingsView>
           SettingsOption(
             label: 'Pasta de ROMs',
             description:
-                'Pasta principal da biblioteca. Crie uma subpasta por '
-                'console (nes, snes, gba, psx...). Se vazio, usa a pasta '
-                'padrão da plataforma.',
+                'Escolha onde criar a pasta principal da biblioteca. '
+                'O app monta automaticamente a estrutura RetroFront: '
+                'ROMs por console, BIOS, SAVES, CONFIGS, COVERS, SYSTEMART '
+                'e TEXTUREPACKS. Se vazio, usa o padrão da plataforma.',
             display: () {
               final custom = s.getRomsPath();
               return custom ?? _defaultRoms;
@@ -183,7 +192,20 @@ class _SettingsViewState extends State<SettingsView>
             onConfirm: (ctx) async {
               final path = await FilePicker.getDirectoryPath();
               if (path != null) {
-                await s.setRomsPath(path);
+                final romsPath = await _svc.systems.ensureDefaultFolders(path);
+                await s.setRomsPath(romsPath);
+                AppDirs.useRomsOverride(romsPath);
+                if (mounted) {
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Estrutura RetroFront criada: ROMs, BIOS, SAVES, '
+                        'CONFIGS, COVERS, SYSTEMART e TEXTUREPACKS.',
+                      ),
+                    ),
+                  );
+                }
               }
             },
           ),
@@ -196,8 +218,17 @@ class _SettingsViewState extends State<SettingsView>
                   'todos os arquivos" na tela do sistema.',
               display: () => _androidAccess ? 'concedido' : 'pendente',
               onConfirm: (ctx) async {
-                final granted = await AndroidStorage.request();
-                if (mounted) setState(() => _androidAccess = granted);
+                var granted = await AndroidStorage.request();
+                if (!granted) {
+                  // Fallback explicito para OEMs que ignoram o intent: abre as
+                  // configuracoes do app, onde fica o toggle manual.
+                  await AndroidStorage.openSettings();
+                }
+                if (mounted) {
+                  // Estado real ao voltar (o toggle pode ter sido concedido).
+                  granted = await AndroidStorage.hasAccess();
+                  setState(() => _androidAccess = granted);
+                }
               },
             ),
         ],
@@ -261,14 +292,15 @@ class _SettingsViewState extends State<SettingsView>
         icon: Icons.palette_outlined,
         options: [
           SettingsOption(
-            label: 'Tema escuro',
+            label: 'Tema claro',
             description:
-                'Usa o tema escuro "console". Desligue para o tema '
-                'claro.',
-            toggle: () => s.getDarkMode(),
+                'Alterna entre o tema escuro "console" e o tema claro. '
+                'A mudança vale na hora.',
+            toggle: () => !s.getDarkMode(),
             onToggle: (v) {
-              s.setDarkMode(v);
-              _svc.darkMode.value = v;
+              s.setDarkMode(!v);
+              _svc.darkMode.value = !v;
+              ScreenMode.setThemeMode(dark: !v);
             },
           ),
           SettingsOption(
@@ -363,10 +395,13 @@ class _SettingsViewState extends State<SettingsView>
           SettingsOption(
             label: 'Mapear botões',
             description:
-                'Redefina os botões do controle para ações do frontend. '
-                'Pressione para atribuir.',
+                'Mapeamento por controle (até 4). Pressione para atribuir. '
+                'Atalhos: Select+Start = Home, Select+LB/RB = página.',
             display: () {
-              final hasMap = s.getButtonMap().trim().isNotEmpty;
+              final hasMap = s.getButtonMap().trim().isNotEmpty ||
+                  s.getControllerButtonMaps()
+                      .values
+                      .any((v) => v.trim().isNotEmpty);
               return hasMap ? 'Personalizado' : 'Padrão';
             },
             onConfirm: (ctx) async {
@@ -428,6 +463,7 @@ class _SettingsViewState extends State<SettingsView>
                   'verificar novamente.',
               display: () => _retroArch ?? 'não instalado',
               onConfirm: (ctx) async {
+                _svc.launcher.invalidateRetroArch();
                 final detected = await _svc.launcher.findRetroArch();
                 if (mounted) setState(() => _retroArch = detected);
               },
@@ -452,7 +488,9 @@ class _SettingsViewState extends State<SettingsView>
                 final path = result?.files.single.path;
                 if (path != null) {
                   await s.setRetroArchPath(path);
-                  if (mounted) setState(() => _retroArch = path);
+                  _svc.launcher.invalidateRetroArch();
+                  final detected = await _svc.launcher.findRetroArch();
+                  if (mounted) setState(() => _retroArch = detected);
                 }
               },
             ),
@@ -731,7 +769,7 @@ class _SettingsViewState extends State<SettingsView>
         backgroundColor: AppTheme.surface,
         title: Text(
           networkOnly ? 'Informações de rede' : 'Informações do sistema',
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -774,13 +812,13 @@ class _SettingsViewState extends State<SettingsView>
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
+          Text(label, style: TextStyle(color: AppTheme.textSecondary)),
           const Spacer(),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
@@ -843,11 +881,11 @@ class _SettingsViewState extends State<SettingsView>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text(
+        title: Text(
           'Ativar modo quiosque?',
           style: TextStyle(color: AppTheme.textPrimary),
         ),
-        content: const Text(
+        content: Text(
           'No modo quiosque o botão de configurações fica oculto. '
           'Você ainda pode sair pressionando Start/Home (ou tocando o '
           'logo) na tela inicial.',
@@ -948,7 +986,7 @@ class _SettingsViewState extends State<SettingsView>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
       );
     }
@@ -1023,10 +1061,10 @@ class _SettingsViewState extends State<SettingsView>
             tooltip: 'Voltar',
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.arrow_back),
-            color: Colors.white70,
+            color: AppTheme.textSecondary,
           ),
           const SizedBox(width: 4),
-          const Text(
+          Text(
             'Configurações',
             style: TextStyle(
               color: AppTheme.textPrimary,
@@ -1076,7 +1114,7 @@ class _InfoPanel extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 40,
                 fontWeight: FontWeight.w800,
@@ -1090,14 +1128,14 @@ class _InfoPanel extends StatelessWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 14,
                 height: 1.5,
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
+            Text(
               'Aperte para abrir as opções desta categoria',
               style: TextStyle(color: AppTheme.textFaint, fontSize: 13),
             ),
@@ -1175,8 +1213,8 @@ class _CategoryCover extends StatelessWidget {
                       label,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
                         fontSize: 15,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
@@ -1273,7 +1311,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppTheme.surface,
-      title: const Text(
+      title: Text(
         'Atualizações',
         style: TextStyle(color: AppTheme.textPrimary),
       ),
@@ -1295,13 +1333,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
+          Text(label, style: TextStyle(color: AppTheme.textSecondary)),
           const Spacer(),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
@@ -1315,7 +1353,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   Widget _buildContent() {
     final result = _result;
     if (result == null) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(color: AppTheme.accent),
       );
     }    if (_downloading) {
@@ -1323,24 +1361,24 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'Baixando atualização...',
             style: TextStyle(color: AppTheme.textPrimary),
           ),
           const SizedBox(height: 14),
           LinearProgressIndicator(
             value: _progress,
-            backgroundColor: Colors.white12,
-            valueColor: const AlwaysStoppedAnimation(AppTheme.accent),
+            backgroundColor: AppTheme.border,
+            valueColor: AlwaysStoppedAnimation(AppTheme.accent),
           ),
           const SizedBox(height: 8),
           Text(
             '${(_progress * 100).round()}%',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Depois do download, o instalador do Android será aberto '
             'para concluir a instalação.',
             style: TextStyle(color: AppTheme.textFaint, fontSize: 12),
@@ -1360,7 +1398,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             color: AppTheme.textSecondary,
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Não foi possível verificar atualizações.',
             style: TextStyle(color: AppTheme.textPrimary),
             textAlign: TextAlign.center,
@@ -1371,7 +1409,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               result.error!,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppTheme.textFaint, fontSize: 12),
+              style: TextStyle(color: AppTheme.textFaint, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1404,7 +1442,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 color: AppTheme.accent.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(Icons.system_update_alt,
                       color: AppTheme.accent, size: 20),
@@ -1427,7 +1465,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 latest.body,
                 maxLines: 8,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                   height: 1.4,
@@ -1444,8 +1482,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             else
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white38),
+                  foregroundColor: AppTheme.textPrimary,
+                  side: BorderSide(color: AppTheme.border),
                 ),
                 onPressed: () => widget.service.openReleasesPage(),
                 icon: const Icon(Icons.open_in_new),
@@ -1453,7 +1491,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               ),
           ] else ...[
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Você já está na versão mais recente.',
               style: TextStyle(color: AppTheme.textSecondary),
               textAlign: TextAlign.center,
@@ -1461,8 +1499,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             const SizedBox(height: 12),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white38),
+                foregroundColor: AppTheme.textPrimary,
+                side: BorderSide(color: AppTheme.border),
               ),
               onPressed: () => widget.service.openReleasesPage(),
               icon: const Icon(Icons.open_in_new),

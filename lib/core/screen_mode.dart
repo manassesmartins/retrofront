@@ -16,19 +16,25 @@ class ScreenMode {
     }
   }
 
-  static void setFullscreen(bool fullscreen) {
+  static void setFullscreen(bool fullscreen, {bool dark = true}) {
     if (!Platform.isAndroid) return;
     SystemChrome.setEnabledSystemUIMode(
       fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
     );
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Color(0x00000000),
-        systemNavigationBarColor: Color(0x00000000),
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
+      SystemUiOverlayStyle(
+        statusBarColor: const Color(0x00000000),
+        systemNavigationBarColor: const Color(0x00000000),
+        statusBarIconBrightness:
+            dark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
       ),
     );
+  }
+
+  /// Atualiza o estilo das barras do sistema conforme o tema.
+  static void setThemeMode({required bool dark}) {
+    setFullscreen(true, dark: dark);
   }
 
   /// Chamada na inicializacao para garantir o comportamento padrao.
