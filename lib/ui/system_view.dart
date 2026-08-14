@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../core/android_storage.dart';
 import '../core/app_dirs.dart';
@@ -35,8 +36,10 @@ class _SystemViewState extends State<SystemView>
   List<SystemEntry> _systems = [];
   int _selected = 0;
   bool _loading = true;
+  bool _loadInFlight = false;
   bool _hasError = false;
   bool _androidAccess = true;
+  bool _accessGateDismissed = false;
   StreamSubscription<GamepadAction>? _gamepadSub;
   bool _depsReady = false;
   bool _routeSubscribed = false;
@@ -128,28 +131,23 @@ class _SystemViewState extends State<SystemView>
   }
 
   Future<void> _load() async {
+    if (_loadInFlight) return;
+    _loadInFlight = true;
     final prevName = _systems.isEmpty ? null : _systems[_selected].name;
     setState(() {
       _loading = true;
       _hasError = false;
     });
     try {
-      // No Android o acesso a pasta publica de ROMs exige permissao de
-      // armazenamento; solicita antes do primeiro scan.
-      if (AndroidStorage.isNeeded && !await AndroidStorage.hasAccess()) {
-        await AndroidStorage.request();
-      }
+      // Apenas rele o estado do acesso. NUNCA solicita a permissao aqui:
+      // abrir a tela do sistema a cada scan/retorno era o que causava o loop
+      // infinito (didChangeAppLifecycleState chamava _load ao voltar).
       _androidAccess =
           !AndroidStorage.isNeeded || await AndroidStorage.hasAccess();
-      // Pasta padrao: monta a estrutura Retrofront na primeira inicializacao
-      // (apenas quando o acesso ja foi concedido; ao conceder depois, o
-      // resume re-roda este fluxo).
-      if (!_defaultStructureEnsured &&
-          _svc.settings.getRomsPath() == null &&
-          await AndroidStorage.hasAccess()) {
-        _defaultStructureEnsured = true;
-        final base = await AppDirs.defaultBaseDir();
-        await _svc.systems.ensureDefaultFolders(base.path);
+      // Cria a estrutura padrao quando o acesso ja esta concedido. Se a pasta
+      // foi escolhida antes da permissao, garante a estrutura agora.
+      if (await AndroidStorage.hasAccess()) {
+        await _ensureLibraryStructure();
       }
       final systems = await _svc.scanner.scanSystems(
         romsOverride: _svc.settings.getRomsPath(),
@@ -174,6 +172,8 @@ class _SystemViewState extends State<SystemView>
         _hasError = true;
         _loading = false;
       });
+    } finally {
+      _loadInFlight = false;
     }
   }
 
@@ -223,16 +223,43 @@ class _SystemViewState extends State<SystemView>
     }
   }
 
-  // Abre a tela do sistema de "All files access" (via request no _load) e o
-  // scan re-roda ao voltar do Android (didChangeAppLifecycleState) e aqui.
+  /// Abre a tela de "All files access" do sistema (Android 11+). Nao fica em
+  /// loop: apenas abre a tela uma vez e rele o estado ao voltar (aqui e no
+  /// didChangeAppLifecycleState). Em Android <= 10 pede a permissao de
+  /// armazenamento em tempo de execucao.
   Future<void> _grantStorage() async {
-    final granted = await AndroidStorage.request();
-    if (!granted) {
+    if (!AndroidStorage.isNeeded) return;
+    final opened = await AndroidStorage.request();
+    if (!opened) {
       // Fallback: alguns OEMs/Android 15 ignoram o intent especifico; abre as
-      // configuracoes do app, onde fica o toggle de "All files access".
+      // configuracoes do app, onde o toggle fica em "Arquivos e midia".
       await AndroidStorage.openSettings();
     }
+    if (await AndroidStorage.hasAccess()) {
+      await _ensureLibraryStructure();
+    }
     await _load();
+  }
+
+  /// Cria a estrutura padrão da biblioteca quando o acesso aos arquivos já
+  /// foi concedido. Para pasta customizada escolhida antes da permissão (a
+  /// criação na época falhou em silêncio), recria a estrutura agora.
+  Future<void> _ensureLibraryStructure() async {
+    final custom = _svc.settings.getRomsPath();
+    if (custom != null) {
+      final sep = p.separator;
+      if (custom.toLowerCase().endsWith('${sep}retrofront${sep}roms')) {
+        // getRomsPath() guarda a raiz de ROMs (base/Retrofront/ROMs); a base
+        // escolhida pelo usuário é o pai do pai.
+        final base = p.dirname(p.dirname(custom));
+        await _svc.systems.ensureDefaultFolders(base);
+      }
+      return;
+    }
+    if (_defaultStructureEnsured) return;
+    _defaultStructureEnsured = true;
+    final base = await AppDirs.defaultBaseDir();
+    await _svc.systems.ensureDefaultFolders(base.path);
   }
 
   Future<void> _pickRomsFolder() async {
@@ -333,6 +360,10 @@ class _SystemViewState extends State<SystemView>
       isLandscape ? 300.0 : 220.0,
     );
     final tileW = (carouselH * 1.0).clamp(0.0, 300.0);
+    // Biblioteca ja configurada (o usuario ja escolheu a pasta de ROMs).
+    final romsConfigured = _svc.settings.getRomsPath() != null;
+    // Android 11+ sem "All files access": precisa conceder o acesso.
+    final grantNeeded = AndroidStorage.isNeeded && !_androidAccess;
 
     return Scaffold(
       body: NavFocus(
@@ -365,24 +396,51 @@ class _SystemViewState extends State<SystemView>
               else if (_systems.isEmpty)
                 _Message(
                   icon: Icons.folder_off_outlined,
-                  title: 'Nenhum sistema encontrado',
-                  message:
-                      'Escolha onde criar a biblioteca e o app monta a '
-                      'estrutura RetroFront automaticamente (ROMs por console, '
-                      'BIOS, SAVES, CONFIGS, COVERS, SYSTEMART e '
-                      'TEXTUREPACKS).\n'
-                      'No Android é preciso também conceder acesso aos '
-                      'arquivos para ler a pasta.',
-                  actionLabel: 'Escolher pasta de ROMs',
-                  actionIcon: Icons.folder_open,
-                  onAction: _pickRomsFolder,
-                  secondaryLabel: AndroidStorage.isNeeded && !_androidAccess
+                  title: romsConfigured
+                      ? 'Biblioteca criada'
+                      : 'Nenhum sistema encontrado',
+                  message: romsConfigured
+                      ? 'A estrutura RetroFront foi criada em:\n'
+                          '${_svc.settings.getRomsPath()}\n'
+                          'Coloque as ROMs nas pastas de cada sistema '
+                          '(ex.: nes, snes, psx) e toque em "Atualizar" '
+                          'para carregar os jogos.'
+                      : 'Escolha onde criar a biblioteca e o app monta a '
+                          'estrutura RetroFront automaticamente (ROMs por '
+                          'console, BIOS, SAVES, CONFIGS, COVERS, SYSTEMART '
+                          'e TEXTUREPACKS).\n'
+                          'No Android 11+ o acesso aos arquivos fica em '
+                          '"Arquivos e mídia > Acesso a todos os arquivos" '
+                          'nas configurações do app (não aparece na lista de '
+                          'permissões normal).',
+                  actionLabel: !romsConfigured
+                      ? 'Escolher pasta de ROMs'
+                      : grantNeeded
+                          ? 'Conceder acesso aos arquivos'
+                          : 'Atualizar',
+                  actionIcon: !romsConfigured
+                      ? Icons.folder_open
+                      : grantNeeded
+                          ? Icons.perm_media
+                          : Icons.refresh,
+                  onAction: !romsConfigured
+                      ? _pickRomsFolder
+                      : grantNeeded
+                          ? _grantStorage
+                          : _load,
+                  secondaryLabel: !romsConfigured && grantNeeded
                       ? 'Conceder acesso aos arquivos'
-                      : null,
-                  secondaryIcon: Icons.perm_media,
-                  onSecondaryAction: AndroidStorage.isNeeded && !_androidAccess
+                      : romsConfigured
+                          ? 'Trocar pasta'
+                          : null,
+                  secondaryIcon: !romsConfigured && grantNeeded
+                      ? Icons.perm_media
+                      : Icons.folder_open,
+                  onSecondaryAction: !romsConfigured && grantNeeded
                       ? _grantStorage
-                      : null,
+                      : romsConfigured
+                          ? _pickRomsFolder
+                          : null,
                 )
               else
                 SafeArea(
@@ -457,6 +515,16 @@ class _SystemViewState extends State<SystemView>
                   ),
                 ),
               if (_screensaverOn) _ScreensaverOverlay(onDismiss: _poke),
+              // Primeira execucao no Android: exige "All files access"
+              // (MANAGE_EXTERNAL_STORAGE) antes de usar o app. Ao aparecer,
+              // abre a tela do sistema automaticamente (uma vez); quando o
+              // usuario ativa o toggle e volta, o onResume rele o estado e
+              // dispensa o aviso sozinho.
+              if (grantNeeded && !_accessGateDismissed)
+                _StoragePermissionGate(
+                  onGrant: _grantStorage,
+                  onDismiss: () => setState(() => _accessGateDismissed = true),
+                ),
             ],
           ),
         ),
@@ -733,6 +801,122 @@ class _Message extends StatelessWidget {
             ),
             if (secondary != null) ...[const SizedBox(height: 10), secondary],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Aviso de primeira execucao no Android: o app precisa de "All files access"
+/// (MANAGE_EXTERNAL_STORAGE) para ler as ROMs. Abre a tela do sistema uma
+/// unica vez ao aparecer; o estado real e relido ao voltar (onResume), que
+/// dispensa o aviso automaticamente quando o acesso for concedido.
+class _StoragePermissionGate extends StatefulWidget {
+  final VoidCallback onGrant;
+  final VoidCallback onDismiss;
+
+  const _StoragePermissionGate({
+    required this.onGrant,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_StoragePermissionGate> createState() => _StoragePermissionGateState();
+}
+
+class _StoragePermissionGateState extends State<_StoragePermissionGate> {
+  bool _autoOpened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Abre a tela do sistema automaticamente na primeira vez em que o aviso
+    // aparece (sem loop: so uma vez por instancia).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _autoOpened) return;
+      _autoOpened = true;
+      widget.onGrant();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppTheme.background,
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppTheme.accent.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.perm_media,
+                    size: 48,
+                    color: AppTheme.accent,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Permissão de acesso aos arquivos',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Para ler as ROMs, o RetroFront precisa de acesso a todos '
+                  'os arquivos do aparelho (permissão MANAGE_EXTERNAL_STORAGE).\n\n'
+                  'Toque em "Permitir" e ative o toggle na tela do sistema. '
+                  'Quando ativar, o app volta sozinho.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                FilledButton.icon(
+                  onPressed: widget.onGrant,
+                  icon: const Icon(Icons.perm_media),
+                  label: const Text('Permitir acesso aos arquivos'),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Se a tela não abrir, ative manualmente em: Configurações > '
+                  'Apps > RetroFront > Arquivos e mídia > Acesso a todos os '
+                  'arquivos.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textFaint,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: widget.onDismiss,
+                  child: Text(
+                    'Depois',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

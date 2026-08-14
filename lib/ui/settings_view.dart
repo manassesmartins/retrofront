@@ -216,19 +216,20 @@ class _SettingsViewState extends State<SettingsView>
               label: 'Acesso aos arquivos (Android)',
               description:
                   'Permite ler a pasta pública /storage/emulated/0/'
-                  'ROMs. No Android 11+ você precisa ativar "Permitir acesso a '
-                  'todos os arquivos" na tela do sistema.',
+                  'ROMs. No Android 11+ o toggle fica em "Arquivos e '
+                  'mídia > Acesso a todos os arquivos" nas configurações do '
+                  'app — não aparece na lista de permissões normal.',
               display: () => _androidAccess ? 'concedido' : 'pendente',
               onConfirm: (ctx) async {
-                var granted = await AndroidStorage.request();
-                if (!granted) {
+                final opened = await AndroidStorage.request();
+                if (!opened) {
                   // Fallback explicito para OEMs que ignoram o intent: abre as
                   // configuracoes do app, onde fica o toggle manual.
                   await AndroidStorage.openSettings();
                 }
                 if (mounted) {
                   // Estado real ao voltar (o toggle pode ter sido concedido).
-                  granted = await AndroidStorage.hasAccess();
+                  final granted = await AndroidStorage.hasAccess();
                   setState(() => _androidAccess = granted);
                 }
               },

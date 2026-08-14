@@ -82,6 +82,9 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
                 "openAppSettings" -> {
                     result.success(openAppSettings())
                 }
+                "getSdkInt" -> {
+                    result.success(android.os.Build.VERSION.SDK_INT)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -253,16 +256,16 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
-    /** Android 11+ (API 30+): MANAGE_EXTERNAL_STORAGE ("All files access"). */
-    private fun isManageExternalStorageGranted(): Boolean {
-        return android.os.Build.VERSION.SDK_INT >= 30 &&
-            android.os.Environment.isExternalStorageManager()
+    /** Android 11+ (API 30+): MANAGE_EXTERNAL_STORAGE ("All files access").
+     *  Retorna null em versoes antigas para o Dart cair no fluxo de storage. */
+    private fun isManageExternalStorageGranted(): Boolean? {
+        if (android.os.Build.VERSION.SDK_INT < 30) return null
+        return android.os.Environment.isExternalStorageManager()
     }
 
     /** Abre a tela de "All files access" do sistema (Android 11+). */
     private fun openManageExternalStorage(): Boolean {
         if (android.os.Build.VERSION.SDK_INT < 30) return false
-        val context = applicationContext
         val intent = Intent(
             android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
             Uri.parse("package:$packageName")

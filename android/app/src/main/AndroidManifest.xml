@@ -13,9 +13,10 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
+    <!-- Escrita em pastas publicas em Android <= 10 (com requestLegacyExternalStorage). -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28"/>
+        android:maxSdkVersion="29"/>
     <!-- Permite instalar o APK baixado (auto-update via GitHub Releases). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
