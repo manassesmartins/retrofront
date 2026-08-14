@@ -57,6 +57,27 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: flutter pub get
 
+      - name: Configurar assinatura (keystore)
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_B64" ]; then
+            echo "::warning::Secrets de assinatura ausentes; o APK sera assinado com a chave de debug."
+            exit 0
+          fi
+          mkdir -p android/app
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
       - name: Instalar dependências do GTK (Linux)
         if: steps.version.outputs.should_release == 'true'
         run: |
