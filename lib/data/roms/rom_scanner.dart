@@ -31,7 +31,11 @@ class RomScanner {
     if (!await root.exists()) return [];
 
     final defs = await definitions.load();
-    final entries = <SystemEntry>[];
+    // Uma mesma definicao nunca pode gerar duas entradas: pastas cujo nome
+    // varia apenas na caixa (ex.: `nes` e `NES`) casam com o mesmo sistema e
+    // apareceriam como cartoes identicos. Prefere-se a pasta com o nome
+    // canonico exato; sem nome exato, mantem-se a primeira pasta encontrada.
+    final byName = <String, SystemEntry>{};
 
     await for (final entity in root.list(followLinks: false)) {
       if (entity is! Directory) continue;
@@ -44,16 +48,26 @@ class RomScanner {
       final noload = File(p.join(entity.path, 'noload.txt'));
       if (await noload.exists()) continue;
 
+      final existing = byName[definition.name];
+      final isExact = folderName == definition.name;
+      if (existing != null) {
+        final existingExact = p.basename(existing.path) == definition.name;
+        if (existingExact || !isExact) continue;
+      }
+
       final (gameCount, hasMedia) = await _statSystem(entity.path, definition);
-      entries.add(SystemEntry(
+      byName[definition.name] = SystemEntry(
         definition: definition,
         path: entity.path,
         gameCount: gameCount,
         hasMedia: hasMedia,
-      ));
+      );
     }
 
-    entries.sort((a, b) => a.fullName.compareTo(b.fullName));
+    // Apenas sistemas com jogos sao carregados: pastas vazias (criadas
+    // automaticamente ou ainda sem ROMs) ficam fora do carrossel.
+    final entries = byName.values.where((e) => e.gameCount > 0).toList()
+      ..sort((a, b) => a.fullName.compareTo(b.fullName));
     return entries;
   }
 

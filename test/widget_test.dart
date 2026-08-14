@@ -70,6 +70,7 @@ void main() {
       await File('${dir.path}/nes/systeminfo.txt').writeAsString('skip');
       await File('${dir.path}/nes/Sub Pasta/inner.nes').writeAsString('rom');
       await File('${dir.path}/snes/README.md').writeAsString('ignore');
+      await File('${dir.path}/snes/Super Metroid.sfc').writeAsString('rom');
       await File('${dir.path}/ignored-folder/anything.nes').create(recursive: true);
 
       final defs = [
@@ -104,6 +105,68 @@ void main() {
       // Subpastas sao ocultadas (estilo EmulationStation).
       expect(names, isNot(contains('Sub Pasta')));
       expect(names, isNot(contains('inner.nes')));
+    });
+
+    test('pastas com mesmo nome variando a caixa nao duplicam o sistema',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('rf_roms_case');
+      addTearDown(() => dir.delete(recursive: true));
+
+      // `nes` (canonico) e `NES` casam com a mesma definicao: so uma entrada.
+      await Directory('${dir.path}/nes').create();
+      await Directory('${dir.path}/NES').create();
+      await File('${dir.path}/nes/Contra.nes').writeAsString('rom');
+      await File('${dir.path}/NES/SMB.nes').writeAsString('rom');
+
+      final defs = [
+        SystemDefinition.fromJson(const {
+          'name': 'nes',
+          'fullName': 'NES',
+          'extension': '.nes',
+        }),
+      ];
+
+      final scanner = RomScanner(
+        definitions: _FakeDefRepo(defs),
+        gamelist: _StubGamelist(),
+      );
+
+      final systems = await scanner.scanSystems(romsOverride: dir.path);
+      expect(systems.length, 1);
+      // Prefere a pasta com o nome canonico exato.
+      expect(p.basename(systems.single.path), 'nes');
+    });
+
+    test('carrega apenas sistemas com jogos (pastas vazias ficam de fora)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('rf_roms_only_games');
+      addTearDown(() => dir.delete(recursive: true));
+
+      await Directory('${dir.path}/nes').create();
+      await Directory('${dir.path}/snes').create(); // vazia: deve ser ignorada
+      await File('${dir.path}/nes/Contra.nes').writeAsString('rom');
+
+      final defs = [
+        SystemDefinition.fromJson(const {
+          'name': 'nes',
+          'fullName': 'NES',
+          'extension': '.nes',
+        }),
+        SystemDefinition.fromJson(const {
+          'name': 'snes',
+          'fullName': 'SNES',
+          'extension': '.sfc',
+        }),
+      ];
+
+      final scanner = RomScanner(
+        definitions: _FakeDefRepo(defs),
+        gamelist: _StubGamelist(),
+      );
+
+      final systems = await scanner.scanSystems(romsOverride: dir.path);
+      expect(systems.length, 1);
+      expect(systems.single.name, 'nes');
     });
   });
 
