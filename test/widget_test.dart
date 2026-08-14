@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gamepads/gamepads.dart' show GamepadAxis, GamepadButton;
 import 'package:path/path.dart' as p;
@@ -12,12 +14,14 @@ import 'package:retrofront/data/gamelist/gamelist_repository.dart';
 import 'package:retrofront/data/launch/launch_service.dart';
 import 'package:retrofront/data/roms/rom_scanner.dart';
 import 'package:retrofront/data/settings/settings_service.dart';
+import 'package:retrofront/data/systems/system_art_installer.dart';
 import 'package:retrofront/data/systems/system_definitions_repository.dart';
 import 'package:retrofront/gamepad/gamepad_manager.dart';
 import 'package:retrofront/models/game.dart';
 import 'package:retrofront/models/game_name.dart';
 import 'package:retrofront/models/system.dart';
 import 'package:retrofront/models/system_override.dart';
+import 'package:retrofront/ui/widgets/system_cover.dart';
 import 'package:retrofront/ui/widgets/virtual_keyboard.dart';
 
 void main() {
@@ -569,6 +573,80 @@ void main() {
       AppDirs.useRomsOverride('/caminho/que/nao/existe');
 
       expect(AppDirs.systemArtPath('nes'), isNull);
+    });
+  });
+
+  group('BundledSystems', () {
+    test('es_systems.json: 195 sistemas, sem duplicados e campos essenciais',
+        () async {
+      final raw = await rootBundle.loadString('assets/systems/es_systems.json');
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final list = decoded['systems'] as List<dynamic>;
+      expect(list.length, 195);
+
+      final systems = list
+          .map((e) => SystemDefinition.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final names = systems.map((s) => s.name).toList();
+      expect(names.toSet().length, names.length, reason: 'nomes duplicados');
+
+      for (final s in systems) {
+        expect(s.name, isNotEmpty);
+        expect(s.fullName, isNotEmpty);
+        expect(s.extensions, isNotEmpty, reason: '${s.name} sem extensoes');
+        expect(s.platform, isNotEmpty, reason: '${s.name} sem platform');
+        expect(s.theGamesDbPlatform, isNotEmpty,
+            reason: '${s.name} sem theGamesDbPlatform');
+        expect(s.theme, isNotEmpty, reason: '${s.name} sem theme');
+      }
+    });
+
+    test('todo sistema do bundle tem logo no mapa _systemLogos', () async {
+      final raw = await rootBundle.loadString('assets/systems/es_systems.json');
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final names = (decoded['systems'] as List<dynamic>)
+          .map((e) => (e as Map<String, dynamic>)['name'] as String)
+          .toList();
+
+      for (final n in names) {
+        expect(systemLogoPath(n), isNotNull, reason: '$n sem logo no mapa');
+      }
+    });
+
+    test('todo logo do bundle existe como asset e sao 195', () async {
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final keys = manifest.listAssets().toSet();
+      final logos = keys.where((k) => k.startsWith('assets/systems/logos/'));
+      expect(logos.length, 195);
+
+      final raw = await rootBundle.loadString('assets/systems/es_systems.json');
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final names = (decoded['systems'] as List<dynamic>)
+          .map((e) => (e as Map<String, dynamic>)['name'] as String)
+          .toList();
+      for (final n in names) {
+        final path = systemLogoPath(n)!;
+        expect(keys, contains(path), reason: 'asset ausente: $path');
+      }
+    });
+
+    test('SystemArtInstaller copia as artes bundled para SYSTEMART', () async {
+      final base = Directory.systemTemp.createTempSync('retrofront_sart');
+      addTearDown(() => base.deleteSync(recursive: true));
+
+      AppDirs.useRomsOverride(p.join(base.path, 'Retrofront', 'ROMs'));
+      await SystemArtInstaller.install();
+
+      final artDir = await AppDirs.systemArtDir();
+      final files = artDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.jpg'))
+          .toList();
+      expect(files.length, 141);
+      expect(File(p.join(artDir.path, 'arcadia.jpg')).existsSync(), isTrue);
+      expect(File(p.join(artDir.path, 'adam.jpg')).existsSync(), isTrue);
+      expect(File(p.join(artDir.path, 'nes.jpg')).existsSync(), isTrue);
     });
   });
 }

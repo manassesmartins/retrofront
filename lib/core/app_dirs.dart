@@ -96,8 +96,13 @@ class AppDirs {
     final base = await getApplicationSupportDirectory();
     final dir = Directory(p.join(base.path, 'RetroFront'));
     if (!await dir.exists()) await dir.create(recursive: true);
+    _privateAppDataPath = dir.path;
     return dir;
   }
+
+  /// Caminho do diretorio privado do app (cache), para leitura sincrona da
+  /// arte de fundo instalada no fallback sem acesso a pasta publica.
+  static String? _privateAppDataPath;
 
   /// Dados internos do app (gamelists, custom_systems, retroachievements):
   /// em `biblioteca/CONFIGS/retrofront` quando a pasta publica e acessivel;
@@ -196,10 +201,15 @@ class AppDirs {
   /// Caminho da arte de fundo de um sistema em `SYSTEMART/<nome>.png` (ou
   /// jpg/jpeg/webp) dentro da biblioteca, ou null se nao existir. Sincrono
   /// para leitura durante o build; sem arte o gradiente do console e usado.
+  /// Tambem procura no diretorio privado do app (fallback do Android sem
+  /// acesso a pasta publica) onde o SystemArtInstaller grava as artes.
   static String? systemArtPath(String name) {
     final safe = name.trim();
     if (safe.isEmpty) return null;
-    for (final root in _libraryRootCandidates()) {
+    final roots = [..._libraryRootCandidates()];
+    final private = _privateAppDataPath;
+    if (private != null) roots.add(private);
+    for (final root in roots) {
       for (final ext in _artExtensions) {
         final f = File(p.join(root, 'SYSTEMART', '$safe.$ext'));
         if (f.existsSync()) return f.path;
