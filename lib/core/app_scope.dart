@@ -15,6 +15,17 @@ import '../data/themes/theme_service.dart';
 import '../gamepad/gamepad_manager.dart';
 import 'update_checker.dart';
 
+/// Progresso da inicializacao dos servicos, exibido na tela de loading.
+class StartupProgress {
+  /// Valor de 0.0 a 1.0.
+  final double value;
+
+  /// Descricao em pt-BR do passo sendo carregado.
+  final String label;
+
+  const StartupProgress(this.value, this.label);
+}
+
 /// Agrupamento dos servicos do aplicativo (injetados via AppScope).
 class AppServices {
   final SettingsService settings;
@@ -42,13 +53,20 @@ class AppServices {
   });
 
   /// Monta todos os servicos (chamado uma unica vez na inicializacao).
-  static Future<AppServices> build() async {
+  /// [onProgress] reporta cada etapa da carga para a tela de loading.
+  static Future<AppServices> build({
+    void Function(StartupProgress progress)? onProgress,
+  }) async {
+    onProgress?.call(const StartupProgress(0.05, 'Carregando configurações...'));
     final settings = SettingsService();
     await settings.init();
+
+    onProgress?.call(const StartupProgress(0.30, 'Preparando biblioteca de jogos...'));
     final systems = SystemDefinitionsRepository();
     final gamelist = GamelistRepository();
     final scanner = RomScanner(definitions: systems, gamelist: gamelist);
 
+    onProgress?.call(const StartupProgress(0.45, 'Configurando emuladores...'));
     final theGamesDb =
         TheGamesDbProvider(apiKey: () => settings.getTheGamesDbKey() ?? '');
     final libretro = LibretroThumbnailsProvider();
@@ -73,6 +91,8 @@ class AppServices {
     );
 
     final launcher = LaunchService(settings: settings);
+
+    onProgress?.call(const StartupProgress(0.60, 'Iniciando controles...'));
     final gamepad = GamepadManager()..start();
     gamepad.setRepeatInterval(
       Duration(milliseconds: settings.getGamepadRepeatMs()),
@@ -83,9 +103,11 @@ class AppServices {
     );
     gamepad.setControllerButtonMaps(settings.getControllerButtonMaps());
 
+    onProgress?.call(const StartupProgress(0.80, 'Carregando tema...'));
     final themes = ThemeService(settings);
     await themes.init();
 
+    onProgress?.call(const StartupProgress(1.0, 'Pronto!'));
     return AppServices(
       settings: settings,
       systems: systems,
