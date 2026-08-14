@@ -39,6 +39,7 @@ class SettingsService {
   static const _kNavSounds = 'nav_sounds';
   static const _kCheckUpdates = 'check_updates';
   static const _kIncludePrerelease = 'include_prerelease';
+  static const _kTheme = 'theme';
 
   static const _allowList = {
     _kRomsPath,
@@ -73,6 +74,7 @@ class SettingsService {
     _kNavSounds,
     _kCheckUpdates,
     _kIncludePrerelease,
+    _kTheme,
   };
 
   SharedPreferencesWithCache? _prefs;
@@ -317,4 +319,9 @@ class SettingsService {
 
   Future<void> setIncludePrerelease(bool value) =>
       _p.setBool(_kIncludePrerelease, value);
+
+  /// Tema visual ativo (id do tema em `themes/` ou 'default').
+  String getTheme() => _p.getString(_kTheme) ?? 'default';
+
+  Future<void> setTheme(String value) => _p.setString(_kTheme, value);
 }

@@ -8,6 +8,7 @@ import 'core/app_scope.dart';
 import 'core/route_observer.dart';
 import 'data/systems/system_art_installer.dart';
 import 'gamepad/gamepad_manager.dart';
+import 'models/theme_palette.dart';
 import 'ui/system_view.dart';
 import 'ui/theme.dart';
 
@@ -77,17 +78,28 @@ class _RetroFrontAppState extends State<RetroFrontApp> {
 
         return AppScope(
           services: services,
-          child: ValueListenableBuilder<bool>(
-            valueListenable: services.darkMode,
-            builder: (context, dark, _) {
-              return MaterialApp(
-                title: 'RetroFront',
-                debugShowCheckedModeBanner: false,
-                navigatorObservers: [routeObserver],
-                theme: AppTheme.build(dark: false),
-                darkTheme: AppTheme.build(dark: true),
-                themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-                home: const SystemView(),
+          child: ValueListenableBuilder<ThemePalette>(
+            valueListenable: services.themes.active,
+            builder: (context, palette, _) {
+              AppTheme.setPalette(palette);
+              return ValueListenableBuilder<bool>(
+                valueListenable: services.darkMode,
+                builder: (context, dark, _) {
+                  final lightTheme = AppTheme.build(dark: false);
+                  final darkTheme = AppTheme.build(dark: true);
+                  // Deixa os statics de AppTheme coerentes com o modo ativo,
+                  // para os widgets que leem a paleta diretamente.
+                  AppTheme.apply(dark: dark);
+                  return MaterialApp(
+                    title: 'RetroFront',
+                    debugShowCheckedModeBanner: false,
+                    navigatorObservers: [routeObserver],
+                    theme: lightTheme,
+                    darkTheme: darkTheme,
+                    themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+                    home: const SystemView(),
+                  );
+                },
               );
             },
           ),

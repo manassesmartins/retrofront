@@ -11,6 +11,7 @@ import '../data/scraping/screenscraper_provider.dart';
 import '../data/scraping/thegamesdb_provider.dart';
 import '../data/settings/settings_service.dart';
 import '../data/systems/system_definitions_repository.dart';
+import '../data/themes/theme_service.dart';
 import '../gamepad/gamepad_manager.dart';
 import 'update_checker.dart';
 
@@ -24,6 +25,7 @@ class AppServices {
   final LaunchService launcher;
   final GamepadManager gamepad;
   final UpdateService update;
+  final ThemeService themes;
   final ValueNotifier<bool> darkMode;
 
   AppServices({
@@ -35,6 +37,7 @@ class AppServices {
     required this.launcher,
     required this.gamepad,
     required this.update,
+    required this.themes,
     required this.darkMode,
   });
 
@@ -80,6 +83,9 @@ class AppServices {
     );
     gamepad.setControllerButtonMaps(settings.getControllerButtonMaps());
 
+    final themes = ThemeService(settings);
+    await themes.init();
+
     return AppServices(
       settings: settings,
       systems: systems,
@@ -89,6 +95,7 @@ class AppServices {
       launcher: launcher,
       gamepad: gamepad,
       update: UpdateService(),
+      themes: themes,
       darkMode: ValueNotifier<bool>(settings.getDarkMode()),
     );
   }

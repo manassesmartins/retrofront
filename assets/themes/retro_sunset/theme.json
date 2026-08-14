@@ -1,0 +1,25 @@
+{
+  "name": "Retro Sunset",
+  "author": "RetroFront",
+  "version": "1.0.0",
+  "dark": {
+    "background": "#1A0B1E",
+    "surface": "#2A1230",
+    "surfaceHigh": "#3D1A46",
+    "accent": "#FF5E8A",
+    "accentAlt": "#FFB648",
+    "textPrimary": "#FFF1F4",
+    "textSecondary": "#D9AFC0",
+    "textFaint": "#8F6479"
+  },
+  "light": {
+    "background": "#FFF4F6",
+    "surface": "#FFFFFF",
+    "surfaceHigh": "#FDE3E9",
+    "accent": "#D6336C",
+    "accentAlt": "#E8590C",
+    "textPrimary": "#3B1222",
+    "textSecondary": "#8A4A5E",
+    "textFaint": "#C29AA8"
+  }
+}

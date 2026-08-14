@@ -21,6 +21,8 @@ Bluetooth. Código novo, sem derivar do ES-DE (inspirado na arquitetura).
   metadados salvos (título corrigido, capa, descrição, ano, gêneros, nota...).
 - Capas são baixadas para `<AppData>/downloaded_media/<sistema>/box2d/`.
 - `custom_systems/es_systems.json` faz override dos sistemas sem editar o asset.
+- Temas visuais (cores) podem ser criados, importados e aplicados em
+  **Configurações → Interface → Tema**.
 
 ### Estrutura de pastas
 
@@ -36,14 +38,15 @@ Bluetooth. Código novo, sem derivar do ES-DE (inspirado na arquitetura).
 ├── n64/  nds/  psx/  psp/  gc/  wii/ ...
 └── ...             ← qualquer pasta que exista em es_systems.json
 
-<AppData>/                    ← dados do app (gamelists, mídia, custom systems)
+<AppData>/                    ← dados do app (gamelists, mídia, temas, custom systems)
 ├── gamelists/
 │   └── <sistema>.json        ← gamelist.json por sistema
 ├── downloaded_media/
 │   └── <sistema>/box2d/*.png
 ├── custom_systems/
 │   └── es_systems.json       ← override de sistemas
-└── settings.json
+└── themes/
+    └── <tema>/theme.json     ← temas criados/importados pelo usuário
 ```
 
 Localização do `<ROMs>`:
@@ -92,6 +95,70 @@ núcleo para cada sistema:
   `%EMULATOR_RETROARCH%` / `%CORE_RETROARCH%` também são respeitadas.
 - **Android:** se o RetroArch estiver instalado, o jogo é aberto por intent
   (FileProvider). Nenhuma configuração extra necessária.
+
+## Temas (aparência)
+
+O RetroFront é personalizável: qualquer pessoa pode criar um tema e aplicar na
+hora em **Configurações → Interface → Tema**. Um tema é apenas um arquivo
+**JSON** com cores para os modos escuro e claro.
+
+### Onde ficam os temas
+
+- **Oficiais (incluídos no app):** `assets/themes/<id>/theme.json`
+- **Do usuário:** `<AppData>/themes/<id>/theme.json` — criados, importados ou
+  exportados pela tela de Temas. Tem prioridade sobre um tema oficial com o
+  mesmo id.
+
+### Formato
+
+```json
+{
+  "name": "Meu Tema",
+  "author": "Seu Nome",
+  "version": "1.0.0",
+  "dark": {
+    "background": "#0A0C12",
+    "surface": "#141823",
+    "surfaceHigh": "#1E2432",
+    "accent": "#8B5CF6",
+    "accentAlt": "#22D3EE",
+    "textPrimary": "#F4F5F9",
+    "textSecondary": "#B4BAC9",
+    "textFaint": "#6E7687"
+  },
+  "light": {
+    "background": "#F4F5F9",
+    "surface": "#FFFFFF",
+    "accent": "#6D3BF0"
+  }
+}
+```
+
+- Cores em hex `#RRGGBB` (ou `#AARRGGBB`). Qualquer campo pode ser omitido —
+  nesse caso o tema usa a cor padrão do RetroFront.
+- O `id` do tema (nome da pasta) é derivado do `name` (minúsculas, sem
+  acentos, espaços viram `_`).
+- Exemplos prontos para copiar: `assets/themes/` (`oled_preto`,
+  `fosforo_crt`, `retro_sunset`).
+
+### Criar, aplicar e compartilhar
+
+Na tela **Configurações → Interface → Tema**:
+
+- **Aplicar** — navegue até o tema e confirme; vale na hora e fica salvo.
+- **Novo tema** — cria um tema a partir do visual atual (basta dar o nome).
+- **Importar** — escolha um arquivo `.json` de tema compartilhado.
+- **Opções do tema** (botão Select/long-press) — exportar o JSON para
+  compartilhar com a comunidade ou excluir temas criados por você.
+
+### Artes de fundo por console (SYSTEMART)
+
+As artes oficiais de cada console ficam empacotadas no app
+(`assets/systems/art/`) e são copiadas para a pasta `SYSTEMART` da biblioteca
+no primeiro uso — o console já aparece com fundo na instalação. Imagens suas já
+existentes em `SYSTEMART` nunca são sobrescritas. Para recopiar as oficiais
+(faltantes) a qualquer momento: **Configurações → Interface → Restaurar artes
+de fundo (SYSTEMART)**.
 
 ## Builds
 
@@ -159,14 +226,17 @@ lib/
 │   ├── gamelist/             # gamelist.json por sistema
 │   ├── scraping/             # libretro-thumbnails, TheGamesDB, cache, orquestrador
 │   ├── launch/               # launcher desktop (Process) + Android (MethodChannel)
-│   └── settings/             # configurações (SharedPreferences)
+│   ├── settings/             # configurações (SharedPreferences)
+│   ├── systems/              # definições de sistemas + arte SYSTEMART
+│   └── themes/               # temas: bundled + do usuário (criar/importar/aplicar)
 ├── gamepad/
 │   └── gamepad_manager.dart  # gamepad → GamepadAction (com repetição)
-├── models/                   # System, Game, GameEntry, GameMetadata
+├── models/                   # System, Game, GameEntry, GameMetadata, ThemePalette
 └── ui/
     ├── system_view.dart      # grade de sistemas
     ├── gamelist_view.dart    # lista de jogos de um sistema
     ├── game_detail_view.dart # detalhe + scraping individual
     ├── settings_view.dart
+    ├── themes_view.dart      # aplicar/importar/criar/exportar temas
     └── widgets/              # navegação, capas, tiles, avaliação
 ```

@@ -1,0 +1,25 @@
+{
+  "name": "Fósforo CRT",
+  "author": "RetroFront",
+  "version": "1.0.0",
+  "dark": {
+    "background": "#03100A",
+    "surface": "#0A2113",
+    "surfaceHigh": "#123B24",
+    "accent": "#33FF66",
+    "accentAlt": "#80FFB3",
+    "textPrimary": "#D9FFE8",
+    "textSecondary": "#7FE8A5",
+    "textFaint": "#3E8F5E"
+  },
+  "light": {
+    "background": "#EAF7EF",
+    "surface": "#FFFFFF",
+    "surfaceHigh": "#D6EFE0",
+    "accent": "#008C3A",
+    "accentAlt": "#0FA958",
+    "textPrimary": "#0B3A1E",
+    "textSecondary": "#3D6B4D",
+    "textFaint": "#7BA889"
+  }
+}

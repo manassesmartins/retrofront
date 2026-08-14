@@ -1,0 +1,25 @@
+{
+  "name": "RetroFront Padrão",
+  "author": "RetroFront",
+  "version": "1.0.0",
+  "dark": {
+    "background": "#0A0C12",
+    "surface": "#141823",
+    "surfaceHigh": "#1E2432",
+    "accent": "#8B5CF6",
+    "accentAlt": "#22D3EE",
+    "textPrimary": "#F4F5F9",
+    "textSecondary": "#B4BAC9",
+    "textFaint": "#6E7687"
+  },
+  "light": {
+    "background": "#F4F5F9",
+    "surface": "#FFFFFF",
+    "surfaceHigh": "#E8EAF1",
+    "accent": "#6D3BF0",
+    "accentAlt": "#0891B2",
+    "textPrimary": "#171A23",
+    "textSecondary": "#545C6E",
+    "textFaint": "#8A91A1"
+  }
+}

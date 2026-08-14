@@ -14,8 +14,10 @@ import '../core/screen_mode.dart';
 import '../core/update_checker.dart';
 import '../gamepad/gamepad_manager.dart';
 import '../models/system.dart';
+import '../data/systems/system_art_installer.dart';
 import 'settings_category_view.dart';
 import 'settings_options.dart';
+import 'themes_view.dart';
 import 'cover_systems_view.dart';
 import 'system_options_view.dart';
 import 'theme.dart';
@@ -292,6 +294,20 @@ class _SettingsViewState extends State<SettingsView>
         icon: Icons.palette_outlined,
         options: [
           SettingsOption(
+            label: 'Tema',
+            description:
+                'Visual do app: escolha um tema oficial ou criado pela '
+                'comunidade, importe arquivos JSON ou crie o seu a partir '
+                'do visual atual. A mudança vale na hora.',
+            display: () => _svc.themes.currentName,
+            onConfirm: (ctx) async {
+              await Navigator.of(
+                ctx,
+              ).push(consoleRoute(const ThemesView()));
+              if (mounted) setState(() {});
+            },
+          ),
+          SettingsOption(
             label: 'Tema claro',
             description:
                 'Alterna entre o tema escuro "console" e o tema claro. '
@@ -301,6 +317,25 @@ class _SettingsViewState extends State<SettingsView>
               s.setDarkMode(!v);
               _svc.darkMode.value = !v;
               ScreenMode.setThemeMode(dark: !v);
+            },
+          ),
+          SettingsOption(
+            label: 'Restaurar artes de fundo (SYSTEMART)',
+            description:
+                'Recopia as artes oficiais do projeto para a pasta '
+                'SYSTEMART. Imagens suas já existentes não são '
+                'sobrescritas.',
+            display: () => 'recopiar oficiais',
+            onConfirm: (ctx) async {
+              await SystemArtInstaller.install();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Artes oficiais restauradas na pasta SYSTEMART.',
+                  ),
+                ),
+              );
             },
           ),
           SettingsOption(

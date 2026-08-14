@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../models/theme_palette.dart';
+
 /// Tema "console" da interface com suporte a claro e escuro, estilo
 /// ES-DE/EmulationStation. As cores da paleta ativa sao atualizadas por
 /// [apply]/[build] antes da construcao da arvore; os widgets leem [AppTheme]
 /// diretamente, sem precisar de plumb de contexto.
+///
+/// Um [ThemePalette] customizado (criado/importado pelo usuario) pode ser
+/// aplicado via [setPalette] — quando definido, as cores dos modos escuro e
+/// claro sao tiradas dele; senao cai nas paletas padrao do RetroFront.
 class AppTheme {
   // ---------- Paleta ativa (atualizada por [apply]) ----------
   static Color background = const Color(0xFF0A0C12);
@@ -19,9 +25,18 @@ class AppTheme {
   static Color scrim = const Color(0x66000000);
   static bool _dark = true;
 
+  /// Tema customizado ativo (ou null para o padrao do RetroFront).
+  static ThemePalette? _palette;
+
   static bool get isDark => _dark;
 
-  // ---------- Paletas fixas ----------
+  /// Define o tema customizado usado por [apply]. Chamado na raiz do app
+  /// (e quando o usuario troca de tema) antes de reconstruir a arvore.
+  static void setPalette(ThemePalette? palette) {
+    _palette = palette;
+  }
+
+  // ---------- Paletas fixas (padrao do RetroFront) ----------
   static const Color _darkBackground = Color(0xFF0A0C12);
   static const Color _darkSurface = Color(0xFF141823);
   static const Color _darkSurfaceHigh = Color(0xFF1E2432);
@@ -44,14 +59,21 @@ class AppTheme {
   /// ser invocado antes de montar telas que leem [AppTheme] fora do MaterialApp.
   static void apply({required bool dark}) {
     _dark = dark;
-    background = dark ? _darkBackground : _lightBackground;
-    surface = dark ? _darkSurface : _lightSurface;
-    surfaceHigh = dark ? _darkSurfaceHigh : _lightSurfaceHigh;
-    accent = dark ? _darkAccent : _lightAccent;
-    accentAlt = dark ? _darkAccentAlt : _lightAccentAlt;
-    textPrimary = dark ? _darkTextPrimary : _lightTextPrimary;
-    textSecondary = dark ? _darkTextSecondary : _lightTextSecondary;
-    textFaint = dark ? _darkTextFaint : _lightTextFaint;
+    final custom = _palette == null
+        ? null
+        : (dark ? _palette!.dark : _palette!.light);
+    background = custom?.background ?? (dark ? _darkBackground : _lightBackground);
+    surface = custom?.surface ?? (dark ? _darkSurface : _lightSurface);
+    surfaceHigh =
+        custom?.surfaceHigh ?? (dark ? _darkSurfaceHigh : _lightSurfaceHigh);
+    accent = custom?.accent ?? (dark ? _darkAccent : _lightAccent);
+    accentAlt = custom?.accentAlt ?? (dark ? _darkAccentAlt : _lightAccentAlt);
+    textPrimary =
+        custom?.textPrimary ?? (dark ? _darkTextPrimary : _lightTextPrimary);
+    textSecondary = custom?.textSecondary ??
+        (dark ? _darkTextSecondary : _lightTextSecondary);
+    textFaint =
+        custom?.textFaint ?? (dark ? _darkTextFaint : _lightTextFaint);
     onAccent = Colors.white;
     border = dark ? Colors.white24 : Colors.black26;
     scrim = dark ? const Color(0x66000000) : const Color(0x1A000000);

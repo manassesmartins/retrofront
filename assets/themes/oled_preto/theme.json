@@ -1,0 +1,25 @@
+{
+  "name": "OLED Preto",
+  "author": "RetroFront",
+  "version": "1.0.0",
+  "dark": {
+    "background": "#000000",
+    "surface": "#0A0A0A",
+    "surfaceHigh": "#141414",
+    "accent": "#00E5FF",
+    "accentAlt": "#39FF14",
+    "textPrimary": "#FAFAFA",
+    "textSecondary": "#9E9E9E",
+    "textFaint": "#616161"
+  },
+  "light": {
+    "background": "#F7F7F7",
+    "surface": "#FFFFFF",
+    "surfaceHigh": "#ECECEC",
+    "accent": "#0097A7",
+    "accentAlt": "#2E7D32",
+    "textPrimary": "#111111",
+    "textSecondary": "#555555",
+    "textFaint": "#9A9A9A"
+  }
+}
