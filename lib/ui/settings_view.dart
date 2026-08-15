@@ -12,6 +12,7 @@ import '../core/device_info.dart';
 import '../core/route_observer.dart';
 import '../core/screen_mode.dart';
 import '../core/update_checker.dart';
+import '../data/downloads/libretro_downloader.dart';
 import '../gamepad/gamepad_manager.dart';
 import '../models/system.dart';
 import '../data/systems/system_art_installer.dart';
@@ -19,11 +20,13 @@ import 'settings_category_view.dart';
 import 'settings_options.dart';
 import 'themes_view.dart';
 import 'cover_systems_view.dart';
+import 'core_downloads_view.dart';
 import 'system_options_view.dart';
 import 'theme.dart';
 import 'widgets/console_route.dart';
 import 'widgets/cover_backdrop.dart';
 import 'widgets/cover_carousel.dart';
+import 'widgets/download_progress_dialog.dart';
 import 'widgets/hint_bar.dart';
 import 'widgets/nav_key_handler.dart';
 import 'widgets/option_menu_sheet.dart';
@@ -555,6 +558,70 @@ class _SettingsViewState extends State<SettingsView>
         ],
       ),
       SettingsCategory(
+        label: 'Downloads',
+        description:
+            'Conteúdo do libretro usado pelo RetroArch, baixado do '
+            'buildbot e extraído em DOWNLOADS dentro da biblioteca.',
+        icon: Icons.download_outlined,
+        options: [
+          SettingsOption(
+            label: 'Arquitetura dos cores',
+            description:
+                'ABI usada ao baixar núcleos: Android (arm64-v8a, '
+                'armeabi-v7a ou x86_64) ou Linux (x86_64 ou aarch64). '
+                'O padrão acompanha a plataforma.',
+            cycleValues: [
+              for (final arch in LibretroDownloader.availableArchs)
+                (arch, arch),
+            ],
+            currentIndex: () => _cycleIndex(
+              LibretroDownloader.availableArchs,
+              s.getCoreArch(),
+            ),
+            onCycle: (idx) => s.setCoreArch(
+              LibretroDownloader.availableArchs[idx],
+            ),
+          ),
+          SettingsOption(
+            label: 'Cores por console',
+            description:
+                'Baixa os núcleos dos consoles marcados do buildbot '
+                'libretro para DOWNLOADS/cores.',
+            display: () => 'selecionar consoles',
+            onConfirm: (ctx) async {
+              await Navigator.of(
+                ctx,
+              ).push(consoleRoute(const CoreDownloadsView()));
+              if (mounted) setState(() {});
+            },
+          ),
+          for (final bundle in LibretroDownloader.bundles)
+            SettingsOption(
+              label: bundle.label,
+              description: bundle.description,
+              display: () => 'baixar',
+              onConfirm: (ctx) async {
+                final error = await showDownloadProgressDialog(
+                  ctx,
+                  title: bundle.label,
+                  itemName: bundle.url.split('/').last,
+                  task: (onProgress) =>
+                      _svc.downloads.downloadBundle(bundle, onProgress: onProgress),
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      error ??
+                          '${bundle.label} salvo em DOWNLOADS/${bundle.destFolder}.',
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+      SettingsCategory(
         label: 'Rede',
         description:
             'Endereço IP do aparelho. Configurar Wi-Fi e conexões é '
@@ -585,7 +652,6 @@ class _SettingsViewState extends State<SettingsView>
             cycleValues: const [
               ('auto', 'Automático'),
               ('thegamesdb', 'TheGamesDB'),
-              ('screenscraper', 'ScreenScraper'),
               ('arcadedb', 'ArcadeDB'),
               ('mobygames', 'MobyGames'),
               ('libretro', 'Libretro (só capas)'),
@@ -593,7 +659,6 @@ class _SettingsViewState extends State<SettingsView>
             currentIndex: () => _cycleIndex(const [
               'auto',
               'thegamesdb',
-              'screenscraper',
               'arcadedb',
               'mobygames',
               'libretro',
@@ -602,7 +667,6 @@ class _SettingsViewState extends State<SettingsView>
               const [
                 'auto',
                 'thegamesdb',
-                'screenscraper',
                 'arcadedb',
                 'mobygames',
                 'libretro',
@@ -652,28 +716,6 @@ class _SettingsViewState extends State<SettingsView>
               );
               if (value != null) {
                 await s.setTheGamesDbKey(value);
-                if (mounted) setState(() {});
-              }
-            },
-          ),
-          SettingsOption(
-            label: 'Usuário ScreenScraper (opcional)',
-            description:
-                'Conta pública do ScreenScraper.fr, usada para '
-                'identificar o app e aumentar o limite de requisições.',
-            display: () {
-              final user = s.getScreenScraperUser();
-              return user.isEmpty ? 'não configurado' : user;
-            },
-            onConfirm: (ctx) async {
-              final value = await showVirtualKeyboardDialog(
-                ctx,
-                title: 'Usuário ScreenScraper',
-                initial: s.getScreenScraperUser(),
-                language: s.getLanguage(),
-              );
-              if (value != null) {
-                await s.setScreenScraperUser(value);
                 if (mounted) setState(() {});
               }
             },

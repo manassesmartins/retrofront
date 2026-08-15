@@ -10,7 +10,6 @@ import 'arcadedb_provider.dart';
 import 'libretro_thumbnails_provider.dart';
 import 'mobygames_provider.dart';
 import 'scrap_provider.dart';
-import 'screenscraper_provider.dart';
 import 'thegamesdb_provider.dart';
 
 /// Orquestra os provedores de scraping para enriquecer os jogos com
@@ -18,7 +17,6 @@ import 'thegamesdb_provider.dart';
 class ScrapeService {
   final TheGamesDbProvider theGamesDb;
   final LibretroThumbnailsProvider libretro;
-  final ScreenScraperDbProvider? screenScraper;
   final ArcadeDbProvider? arcadeDb;
   final MobyGamesProvider? mobyGames;
   final GamelistRepository gamelist;
@@ -28,7 +26,6 @@ class ScrapeService {
   ScrapeService({
     required this.theGamesDb,
     required this.libretro,
-    this.screenScraper,
     this.arcadeDb,
     this.mobyGames,
     required this.gamelist,
@@ -41,7 +38,6 @@ class ScrapeService {
     final pref = settings.getScrapeProvider();
     final fallbacks = <ScrapProvider>[
       if (theGamesDb.isConfigured) theGamesDb,
-      if (screenScraper?.isConfigured ?? false) screenScraper!,
       if (arcadeDb?.isConfigured ?? false) arcadeDb!,
       if (mobyGames?.isConfigured ?? false) mobyGames!,
       libretro,
@@ -49,9 +45,6 @@ class ScrapeService {
     final forced = switch (pref) {
       'thegamesdb' => theGamesDb.isConfigured ? theGamesDb : null,
       'libretro' => libretro,
-      'screenscraper' => screenScraper?.isConfigured ?? false
-          ? screenScraper!
-          : null,
       'arcadedb' => arcadeDb?.isConfigured ?? false ? arcadeDb! : null,
       'mobygames' => mobyGames?.isConfigured ?? false ? mobyGames! : null,
       _ => null,

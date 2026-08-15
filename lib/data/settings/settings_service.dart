@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/system_override.dart';
+import '../downloads/libretro_downloader.dart';
 
 /// Preferencias do aplicativo com cache em memoria (SharedPreferencesWithCache),
 /// permitindo leituras sincronas durante o scraping e lançamento de jogos.
@@ -25,10 +26,10 @@ class SettingsService {
   static const _kLanguage = 'language';
   static const _kButtonMap = 'button_map';
   static const _kControllerButtonMaps = 'controller_button_maps';
-  static const _kScreenScraperUser = 'screenscraper_user';
   static const _kArcadeDbKey = 'arcadedb_key';
   static const _kMobyGamesKey = 'mobygames_key';
   static const _kCoverSystems = 'cover_systems';
+  static const _kCoreArch = 'core_arch';
   static const _kRaEnabled = 'ra_enabled';
   static const _kRaUsername = 'ra_username';
   static const _kRaPassword = 'ra_password';
@@ -60,10 +61,10 @@ class SettingsService {
     _kLanguage,
     _kButtonMap,
     _kControllerButtonMaps,
-    _kScreenScraperUser,
     _kArcadeDbKey,
     _kMobyGamesKey,
     _kCoverSystems,
+    _kCoreArch,
     _kRaEnabled,
     _kRaUsername,
     _kRaPassword,
@@ -204,11 +205,16 @@ class SettingsService {
   Future<void> setControllerButtonMaps(Map<String, String> value) =>
       _p.setString(_kControllerButtonMaps, jsonEncode(value));
 
-  /// Usuário ScreenScraper (para API pública).
-  String getScreenScraperUser() => _p.getString(_kScreenScraperUser) ?? '';
+  /// Arquitetura dos cores baixados do buildbot (ex.: "arm64-v8a" no
+  /// Android, "x86_64" no Linux). Padrão por plataforma.
+  String getCoreArch() {
+    final stored = _p.getString(_kCoreArch);
+    if (stored != null && stored.isNotEmpty) return stored;
+    return LibretroDownloader.defaultArch;
+  }
 
-  Future<void> setScreenScraperUser(String value) =>
-      _p.setString(_kScreenScraperUser, value.trim());
+  Future<void> setCoreArch(String value) =>
+      _p.setString(_kCoreArch, value.trim());
 
   /// Chave API ArcadeDB.
   String getArcadeDbKey() => _p.getString(_kArcadeDbKey) ?? '';

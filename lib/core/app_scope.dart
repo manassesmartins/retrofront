@@ -1,13 +1,13 @@
 import 'package:flutter/widgets.dart';
 
 import '../data/gamelist/gamelist_repository.dart';
+import '../data/downloads/libretro_downloader.dart';
 import '../data/launch/launch_service.dart';
 import '../data/roms/rom_scanner.dart';
 import '../data/scraping/arcadedb_provider.dart';
 import '../data/scraping/libretro_thumbnails_provider.dart';
 import '../data/scraping/mobygames_provider.dart';
 import '../data/scraping/scrape_service.dart';
-import '../data/scraping/screenscraper_provider.dart';
 import '../data/scraping/thegamesdb_provider.dart';
 import '../data/settings/settings_service.dart';
 import '../data/systems/system_definitions_repository.dart';
@@ -34,6 +34,7 @@ class AppServices {
   final RomScanner scanner;
   final ScrapeService scrape;
   final LaunchService launcher;
+  final LibretroDownloader downloads;
   final GamepadManager gamepad;
   final UpdateService update;
   final ThemeService themes;
@@ -46,6 +47,7 @@ class AppServices {
     required this.scanner,
     required this.scrape,
     required this.launcher,
+    required this.downloads,
     required this.gamepad,
     required this.update,
     required this.themes,
@@ -70,9 +72,6 @@ class AppServices {
     final theGamesDb =
         TheGamesDbProvider(apiKey: () => settings.getTheGamesDbKey() ?? '');
     final libretro = LibretroThumbnailsProvider();
-    final screenScraper = ScreenScraperDbProvider(
-      username: () => settings.getScreenScraperUser(),
-    );
     final arcadeDb = ArcadeDbProvider(
       apikey: () => settings.getArcadeDbKey(),
     );
@@ -82,7 +81,6 @@ class AppServices {
     final scrape = ScrapeService(
       theGamesDb: theGamesDb,
       libretro: libretro,
-      screenScraper: screenScraper,
       arcadeDb: arcadeDb,
       mobyGames: mobyGames,
       gamelist: gamelist,
@@ -91,6 +89,9 @@ class AppServices {
     );
 
     final launcher = LaunchService(settings: settings);
+
+    onProgress?.call(const StartupProgress(0.55, 'Preparando downloads...'));
+    final downloads = LibretroDownloader();
 
     onProgress?.call(const StartupProgress(0.60, 'Iniciando controles...'));
     final gamepad = GamepadManager()..start();
@@ -115,6 +116,7 @@ class AppServices {
       scanner: scanner,
       scrape: scrape,
       launcher: launcher,
+      downloads: downloads,
       gamepad: gamepad,
       update: UpdateService(),
       themes: themes,
