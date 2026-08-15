@@ -612,6 +612,28 @@ void main() {
     });
   });
 
+  group('LaunchService.androidCorePath', () {
+    test('converte core desktop no caminho do Android', () {
+      expect(
+        LaunchService.androidCorePath('com.retroarch', 'mgba_libretro.so'),
+        '/data/data/com.retroarch/cores/mgba_libretro_android.so',
+      );
+    });
+
+    test('preserva core ja no formato android', () {
+      expect(
+        LaunchService.androidCorePath(
+            'com.retroarch.aarch64', 'nes_libretro_android.so'),
+        '/data/data/com.retroarch.aarch64/cores/nes_libretro_android.so',
+      );
+    });
+
+    test('retorna null sem core definido', () {
+      expect(LaunchService.androidCorePath('com.retroarch', null), isNull);
+      expect(LaunchService.androidCorePath('com.retroarch', ''), isNull);
+    });
+  });
+
   group('SystemArtPath', () {
     setUp(() => AppDirs.useRomsOverride(null));
 

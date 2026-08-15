@@ -135,17 +135,57 @@ class MainActivity : FlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
-    private fun launchRetroArch(romPath: String, corePath: String?): Boolean {
-        val pkg = findRetroArchPackage() ?: return false
+    /** Lanca o jogo no RetroArch. Retorna null em caso de sucesso, ou uma
+     *  mensagem de erro para o usuario (null nunca e lido como sucesso). */
+    private fun launchRetroArch(romPath: String, corePath: String?): String? {
+        val pkg = findRetroArchPackage()
+        if (pkg == null) {
+            return "RetroArch não está instalado. Instale o RetroArch na Play Store " +
+                "ou em retroarch.com para jogar."
+        }
+        if (!File(romPath).exists()) {
+            return "O arquivo do jogo não foi encontrado: $romPath"
+        }
 
         // 1) Estilo ES-DE: intent direto forcando o core (RetroActivityFuture),
         // abrindo o jogo ja com o emulador/core certo, sem telas intermediarias.
-        if (!corePath.isNullOrEmpty() && File(romPath).exists()) {
-            if (launchWithCore(pkg, romPath, corePath)) return true
+        if (!corePath.isNullOrEmpty()) {
+            val target = resolveCoreTarget(corePath, pkg)
+            if (target == null) {
+                return "O núcleo (core) deste console não está instalado no RetroArch. " +
+                    "Abra o RetroArch, acesse \"Online Updater\" -> \"Core Updater\" e " +
+                    "instale o core correspondente, depois tente abrir o jogo novamente."
+            }
+            if (launchWithCore(target.first, romPath, target.second)) return null
+            return "Não foi possível abrir o jogo no RetroArch."
         }
 
         // 2) Fallback: FileProvider + ACTION_VIEW (RetroArch escolhe o core).
-        return launchByView(romPath)
+        return if (launchByView(romPath)) null
+        else "Não foi possível abrir o jogo. O formato pode não ser suportado pelo RetroArch."
+    }
+
+    /** Encontra o arquivo do core realmente instalado: o core pode não existir
+     *  no pacote detectado primeiro, mas sim em outro RetroArch instalado
+     *  (ex.: cores do com.retroarch.aarch64 com o com.retroarch detectado). */
+    private fun resolveCoreTarget(corePath: String, detectedPkg: String): Pair<String, String>? {
+        val coreFile = corePath.substringAfterLast('/')
+        val candidates = mutableListOf<String>()
+        if (detectedPkg.isNotEmpty()) candidates.add(detectedPkg)
+        for (pkg in retroarchPackages) if (pkg !in candidates) candidates.add(pkg)
+        for (pkg in candidates) {
+            if (!isPackageInstalled(pkg)) continue
+            val file = File("/data/data/$pkg/cores/$coreFile")
+            if (file.exists()) return pkg to file.absolutePath
+        }
+        return null
+    }
+
+    private fun isPackageInstalled(pkg: String): Boolean = try {
+        applicationContext.packageManager.getPackageInfo(pkg, 0)
+        true
+    } catch (e: Exception) {
+        false
     }
 
     /** Abre a ROM no RetroArch ja com o core definido, estilo ES-DE. */

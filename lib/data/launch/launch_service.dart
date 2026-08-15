@@ -163,18 +163,17 @@ class LaunchService {
     }
     // Core do sistema (comando es_systems.json ou override do usuário),
     // no formato "_libretro_android.so" usado pelos cores do Android.
-    final core = _androidCorePath(pkg, system);
+    final core = androidCorePath(pkg, _coreForSystem(system));
     const channel = MethodChannel('retrofront/launcher');
     try {
-      final ok = await channel.invokeMethod<bool>('launchRetroArch', {
+      // O canal retorna null em caso de sucesso, ou a mensagem de erro que
+      // deve ser exibida ao usuário (ex.: core não instalado no RetroArch).
+      final error = await channel.invokeMethod<String?>('launchRetroArch', {
         'rom': game.path,
         'core': core,
       });
-      if (ok == true) return const LaunchResult.success();
-      return LaunchResult.failure(
-        'Não foi possível abrir "${game.name}". O formato pode não ser '
-        'suportado pelo RetroArch ou o arquivo não está acessível.',
-      );
+      if (error == null) return const LaunchResult.success();
+      return LaunchResult.failure(error);
     } on PlatformException catch (e) {
       return LaunchResult.failure(e.message ?? 'Falha ao lançar emulador.');
     }
@@ -206,14 +205,13 @@ class LaunchService {
   /// cores ficam no diretorio privado do RetroArch com sufixo "_android";
   /// sao passados via intent (RetroActivityFuture) para abrir o jogo ja com o
   /// core certo, sem o RetroArch precisar adivinhar.
-  String? _androidCorePath(String pkg, SystemDefinition system) {
-    final core = _coreForSystem(system);
-    if (core == null || core.isEmpty) return null;
-    final file = core.endsWith('_android.so')
-        ? core
-        : core.endsWith('.so')
-            ? '${core.substring(0, core.length - 3)}_android.so'
-            : '${core}_android.so';
+  static String? androidCorePath(String pkg, String? coreName) {
+    if (coreName == null || coreName.isEmpty) return null;
+    final file = coreName.endsWith('_android.so')
+        ? coreName
+        : coreName.endsWith('.so')
+            ? '${coreName.substring(0, coreName.length - 3)}_android.so'
+            : '${coreName}_android.so';
     return '/data/data/$pkg/cores/$file';
   }
 
