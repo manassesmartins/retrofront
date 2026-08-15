@@ -10,17 +10,37 @@ import 'scrap_provider.dart';
 /// Provedor de capas sem chave, baseado no repositório libretro-thumbnails
 /// (mesma fonte de imagens usada pelo RetroArch). Cobre centenas de sistemas
 /// com boxart oficial, acessível por HTTPS.
+///
+/// IMPORTANTE: no repositório principal cada pasta de sistema é um git
+/// submodule que aponta para um repositório próprio (ex.: a pasta
+/// "Nintendo - Nintendo Entertainment System" → `Nintendo_-_Nintendo_
+/// Entertainment_System`). As URLs raw/Contents do repositório principal
+/// retornam 404 para qualquer arquivo dentro de um submodule, então as
+/// requisições precisam ir direto ao repositório do sistema.
 class LibretroThumbnailsProvider implements ScrapProvider {
-  static const _rawBase =
-      'https://raw.githubusercontent.com/libretro-thumbnails/libretro-thumbnails/master';
-  static const _apiBase =
-      'https://api.github.com/repos/libretro-thumbnails/libretro-thumbnails/contents';
+  static const _rawBase = 'https://raw.githubusercontent.com/libretro-thumbnails';
+  static const _apiBase = 'https://api.github.com/repos/libretro-thumbnails';
+
+  /// Repositórios cujo nome não é derivável da pasta (substituindo espaços
+  /// por underscore). Vem do `.gitmodules` do repositório principal.
+  static const _specialRepos = {
+    'Bomberman Game Clone': 'MrBoom',
+    "Jump 'n Bump": 'Jump_n_Bump',
+    'Nintendo - Nintendo 3DS (DLC)': 'Nintendo_-_Nintendo_3DS_DLC',
+    'Philips - Videopac+': 'Philips_-_Videopac',
+    'Sony - PlayStation 3 (Downloadable)': 'Sony_-_PlayStation_3_Downloadable',
+  };
 
   final http.Client _client;
   final Map<String, List<Map<String, String>>> _listingCache = {};
 
   LibretroThumbnailsProvider({http.Client? client})
       : _client = client ?? http.Client();
+
+  /// Nome do repositório GitHub do sistema (submódulo), usado nas URLs raw e
+  /// da Contents API. Padrão: pasta com espaços trocados por underscore.
+  static String repoFor(String folder) =>
+      _specialRepos[folder] ?? folder.replaceAll(' ', '_');
 
   @override
   String get name => 'libretro-thumbnails';
@@ -44,7 +64,7 @@ class LibretroThumbnailsProvider implements ScrapProvider {
     // Caminho rápido: tenta o nome exato da ROM.
     for (final title in _candidateTitles(ctx.gameName)) {
       final url =
-          '$_rawBase/${_enc(folder)}/Named_Boxarts/${_enc(title)}.png';
+          '$_rawBase/${_repoEnc(folder)}/Named_Boxarts/${_enc(title)}.png';
       final bytes = await _download(url);
       if (bytes != null) {
         final cover = await ArtworkCache.saveCover(
@@ -66,7 +86,7 @@ class LibretroThumbnailsProvider implements ScrapProvider {
       final best = _fuzzyMatch(listing, ctx.gameName);
       if (best != null) {
         final bytes = await _download(
-          '$_rawBase/${_enc(folder)}/Named_Boxarts/${_enc(best)}',
+          '$_rawBase/${_repoEnc(folder)}/Named_Boxarts/${_enc(best)}',
         );
         if (bytes != null) {
           final cover = await ArtworkCache.saveCover(
@@ -115,7 +135,7 @@ class LibretroThumbnailsProvider implements ScrapProvider {
     final cached = _listingCache[folder];
     if (cached != null) return cached;
 
-    final url = '$_apiBase/${_enc(folder)}/Named_Boxarts';
+    final url = '$_apiBase/${_repoEnc(folder)}/contents/Named_Boxarts';
     try {
       final res = await _client.get(
         Uri.parse(url),
@@ -198,4 +218,6 @@ class LibretroThumbnailsProvider implements ScrapProvider {
   }
 
   String _enc(String s) => Uri.encodeComponent(s);
+
+  String _repoEnc(String folder) => Uri.encodeComponent(repoFor(folder));
 }
